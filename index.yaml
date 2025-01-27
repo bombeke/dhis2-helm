@@ -1333,6 +1333,16 @@ entries:
   web:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2025-01-27T06:55:01.038519614Z"
+    description: Web App chart
+    digest: 6fabb506be0b39adcfe36f30a2a8334939e6645b68fa2628fd721a5c4f0ebb48
+    name: web
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.1/web-0.1.1.tgz
+    version: 0.1.1
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2025-01-26T12:27:45.846463761Z"
     description: Web App chart
     digest: 246d1c5c5b93ceb083dfb90ff55470c04ffc56e8ac18b8455f69311d85558920
@@ -1341,4 +1351,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2025-01-26T12:27:45.846558618Z"
+generated: "2025-01-27T06:55:01.038636161Z"
