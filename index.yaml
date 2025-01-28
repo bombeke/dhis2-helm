@@ -64,6 +64,33 @@ entries:
   core:
   - apiVersion: v2
     appVersion: 41.2.0
+    created: "2025-01-28T07:31:24.922236691Z"
+    dependencies:
+    - condition: redis.enabled
+      name: redis
+      repository: https://charts.bitnami.com/bitnami
+      version: ~20
+    - condition: postgresql.enabled
+      name: postgresql
+      repository: https://charts.bitnami.com/bitnami
+      version: ~12
+    - condition: mariadb.enabled
+      name: mariadb
+      repository: https://charts.bitnami.com/bitnami
+      version: ~19
+    - condition: casdoor-helm-charts.enabled
+      name: casdoor-helm-charts
+      repository: oci://registry-1.docker.io/casbin
+      version: v1.739.0
+    description: DHIS 2 Helm Chart
+    digest: 783fc9e4618deaeb14e3509bc281adee3f0f89b39d6ee665e30d7cc0196e5d4d
+    name: core
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/core-1.0.42/core-1.0.42.tgz
+    version: 1.0.42
+  - apiVersion: v2
+    appVersion: 41.2.0
     created: "2025-01-28T07:19:20.689438379Z"
     dependencies:
     - condition: redis.enabled
@@ -1470,4 +1497,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2025-01-28T07:19:20.851242423Z"
+generated: "2025-01-28T07:31:25.043747974Z"
