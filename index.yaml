@@ -1207,6 +1207,41 @@ entries:
   dashboard:
   - apiVersion: v2
     appVersion: 1.0.0
+    created: "2025-02-04T14:39:50.216754534Z"
+    dependencies:
+    - condition: superset.enabled
+      name: superset
+      repository: https://apache.github.io/superset
+      version: ~0
+    - condition: trino.enabled
+      name: trino
+      repository: https://trinodb.github.io/charts
+      version: ~0
+    - condition: kube-starrocks.enabled
+      name: kube-starrocks
+      repository: https://starrocks.github.io/starrocks-kubernetes-operator
+      version: ~1
+    - condition: drupal.enabled
+      name: drupal
+      repository: https://charts.bitnami.com/bitnami
+      version: ~21
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: ~2
+    - condition: opensearch-dashboards.enabled
+      name: opensearch-dashboards
+      repository: https://opensearch-project.github.io/helm-charts
+      version: ~2
+    description: A Helm chart for Kubernetes
+    digest: cceb4e96c867cc666c5f689a4cb37e6cb0a72e938ce362b3c36ce37985a43730
+    name: dashboard
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/dashboard-0.1.2/dashboard-0.1.2.tgz
+    version: 0.1.2
+  - apiVersion: v2
+    appVersion: 1.0.0
     created: "2025-01-20T08:23:44.820434738Z"
     dependencies:
     - condition: superset.enabled
@@ -1524,4 +1559,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2025-01-28T07:51:51.870528286Z"
+generated: "2025-02-04T14:39:50.335721207Z"
