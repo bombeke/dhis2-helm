@@ -1521,6 +1521,16 @@ entries:
   tritonserver:
   - apiVersion: v2
     appVersion: 24.12.0
+    created: "2025-02-13T16:29:56.002646444Z"
+    description: A Helm chart for Kubernetes
+    digest: db69870b74a2f43a70f32caaf4da752891822b8eaf571b2010aae8db7fafb5e0
+    name: tritonserver
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/tritonserver-0.1.4/tritonserver-0.1.4.tgz
+    version: 0.1.4
+  - apiVersion: v2
+    appVersion: 24.12.0
     created: "2025-01-22T05:38:13.203467871Z"
     description: A Helm chart for Kubernetes
     digest: bc2f2c1050d4d0623a58eacfcaaacbbd739de09a167d2ff4baceca8b95f05097
@@ -1590,4 +1600,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2025-02-05T16:31:18.337116976Z"
+generated: "2025-02-13T16:29:56.002769323Z"
