@@ -1332,6 +1332,38 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: 3.8.1
+    created: "2025-02-16T08:17:59.302608652Z"
+    dependencies:
+    - condition: kafka.enabled
+      name: kafka
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: ~30
+    - name: common
+      repository: oci://registry-1.docker.io/bitnamicharts
+      tags:
+      - bitnami-common
+      version: 2.x.x
+    description: Helm Kafka Streaming Chart
+    digest: 12fd569d18c3315d04a60acdd04c076964c77bc36f335ade4f34c5e1f8a7d703
+    name: kafka
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/kafka-0.1.2/kafka-0.1.2.tgz
+    version: 0.1.2
+  - annotations:
+      category: Infrastructure
+      images: |
+        - name: jmx-exporter
+          image: docker.io/bitnami/jmx-exporter:1.0.1-debian-12-r9
+        - name: kafka
+          image: docker.io/bitnami/kafka:3.8.1-debian-12-r0
+        - name: kubectl
+          image: docker.io/bitnami/kubectl:1.31.2-debian-12-r3
+        - name: os-shell
+          image: docker.io/bitnami/os-shell:12-debian-12-r32
+      licenses: Apache-2.0
+    apiVersion: v2
+    appVersion: 3.8.1
     created: "2025-01-20T08:23:45.052459639Z"
     dependencies:
     - condition: kafka.enabled
@@ -1600,4 +1632,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2025-02-13T16:29:56.002769323Z"
+generated: "2025-02-16T08:17:59.391508564Z"
