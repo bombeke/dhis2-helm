@@ -129,14 +129,23 @@ superset:
     tag: 4.1.1-6
   postgresql:
     enabled: true
-    #debug: true
+    debug: true
     auth:
       database: superset
       password: superset
       username: superset
-      postgresqlPassword: superset
-    image:
-      tag: 17.0.0-debian-12-r9
+      postgresPassword: superset
+    #image:
+    #  registry: docker.io
+    #  repository: bitnami/postgresql
+    #  tag: 17.4.0-debian-12-r2
+    passwordUpdateJob:
+      enabled: true
+    primary:
+      pgHbaConfiguration: |-
+        local all all trust
+        host all all localhost trust
+        host all all 0.0.0.0/0 md5  
   ingress:
     enabled: true
     ingressClassName: ~
@@ -183,7 +192,7 @@ superset:
         "DASHBOARD_NATIVE_FILTERS": True
       }
       ALERT_REPORTS_NOTIFICATION_DRY_RUN = True
-      APP_NAME = "Bombeke Dashboard"
+      APP_NAME = "Bombeke Beyond Data Platform"
       CACHE_CONFIG = {
           'CACHE_TYPE': 'redis',
           'CACHE_DEFAULT_TIMEOUT': 300,  # 5 minutes
@@ -220,7 +229,6 @@ superset:
 
     echo "Downloading drivers"
 
-
     curl --silent -Lo /app/superset/db_engine_specs/dhis2_api.py https://raw.githubusercontent.com/talexie/dhis2-docker/refs/heads/master/superset/dhis2_api.py
     echo "Installed drivers successfully"
 
@@ -235,6 +243,8 @@ superset:
       sqlalchemy-solr \
       'sqlparse>0.5,<0.6.0' \
       sqlalchemydhis2>=1.0.71 \
+      "sqlalchemy>=1.4, <2" \
+      "sqlalchemy-utils>=0.38.3, <0.39" \
       starrocks \
       trino --retries 100 --timeout 60 && \
     if [ ! -f ~/bootstrap ]; then echo "Running Superset with uid {{ .Values.runAsUser }}" > ~/bootstrap; fi
