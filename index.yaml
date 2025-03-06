@@ -64,6 +64,33 @@ entries:
   core:
   - apiVersion: v2
     appVersion: 41.2.0
+    created: "2025-03-06T08:33:01.356219269Z"
+    dependencies:
+    - condition: redis.enabled
+      name: redis
+      repository: https://charts.bitnami.com/bitnami
+      version: ~20
+    - condition: postgresql.enabled
+      name: postgresql
+      repository: https://charts.bitnami.com/bitnami
+      version: ~12
+    - condition: mariadb.enabled
+      name: mariadb
+      repository: https://charts.bitnami.com/bitnami
+      version: ~19
+    - condition: casdoor-helm-charts.enabled
+      name: casdoor-helm-charts
+      repository: oci://registry-1.docker.io/casbin
+      version: v1.855.0
+    description: DHIS 2 Helm Chart
+    digest: 21921ab707529f2b1323fc32bf3275515b28c6240cdcc65f7ee6608947d2cd4e
+    name: core
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/core-1.0.44/core-1.0.44.tgz
+    version: 1.0.44
+  - apiVersion: v2
+    appVersion: 41.2.0
     created: "2025-01-28T07:51:51.715234865Z"
     dependencies:
     - condition: redis.enabled
@@ -1207,6 +1234,37 @@ entries:
   dashboard:
   - apiVersion: v2
     appVersion: 1.0.0
+    created: "2025-03-06T08:33:01.640555723Z"
+    dependencies:
+    - condition: superset.enabled
+      name: superset
+      repository: https://apache.github.io/superset
+      version: ~0
+    - condition: trino.enabled
+      name: trino
+      repository: https://trinodb.github.io/charts
+      version: ~0
+    - condition: kube-starrocks.enabled
+      name: kube-starrocks
+      repository: https://starrocks.github.io/starrocks-kubernetes-operator
+      version: ~1
+    - condition: drupal.enabled
+      name: drupal
+      repository: https://charts.bitnami.com/bitnami
+      version: ~21
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://charts.bitnami.com/bitnami
+      version: ~1
+    description: A Helm chart for Kubernetes
+    digest: dd3d040ad57644abd2c2b253e30f908ce17820d66fc68cdd9f1a1646b97856a7
+    name: dashboard
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/dashboard-0.1.4/dashboard-0.1.4.tgz
+    version: 0.1.4
+  - apiVersion: v2
+    appVersion: 1.0.0
     created: "2025-02-05T16:31:18.17223977Z"
     dependencies:
     - condition: superset.enabled
@@ -1318,6 +1376,38 @@ entries:
     - https://github.com/bombeke/dhis2-helm/releases/download/dashboard-0.1.0/dashboard-0.1.0.tgz
     version: 0.1.0
   kafka:
+  - annotations:
+      category: Infrastructure
+      images: |
+        - name: jmx-exporter
+          image: docker.io/bitnami/jmx-exporter:1.0.1-debian-12-r9
+        - name: kafka
+          image: docker.io/bitnami/kafka:3.8.1-debian-12-r0
+        - name: kubectl
+          image: docker.io/bitnami/kubectl:1.31.2-debian-12-r3
+        - name: os-shell
+          image: docker.io/bitnami/os-shell:12-debian-12-r32
+      licenses: Apache-2.0
+    apiVersion: v2
+    appVersion: 3.8.1
+    created: "2025-03-06T08:33:01.878523096Z"
+    dependencies:
+    - condition: kafka.enabled
+      name: kafka
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: ~30
+    - name: common
+      repository: oci://registry-1.docker.io/bitnamicharts
+      tags:
+      - bitnami-common
+      version: 2.x.x
+    description: Helm Kafka Streaming Chart
+    digest: 9bd76fe85c429a4bff13f6276c65f4003ec08b7d516dc3dfb62da42d3120f617
+    name: kafka
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/kafka-0.1.3/kafka-0.1.3.tgz
+    version: 0.1.3
   - annotations:
       category: Infrastructure
       images: |
@@ -1632,4 +1722,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2025-02-16T08:17:59.391508564Z"
+generated: "2025-03-06T08:33:02.101807627Z"
