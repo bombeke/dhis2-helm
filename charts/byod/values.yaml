@@ -7,11 +7,11 @@ replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  repository: "mwebaze/comsai"
+  repository: "talexie/coms_ai"
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
+  tag: "latest"
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -126,8 +126,19 @@ tolerations: []
 
 affinity: {}
 
+middleware:
+  headers:
+    accessControlAllowHeaders: 
+      - "*"
+# Add a list of allowed origins
+allowedOrigins: []
+
 env:
   - SOLR_URL: http://localhost:8081/solr
+  - OLLAMA_BASE_URL: http://localhost:11434
+  - DRUPAL_BASE_URL: http://localhost:8080
+  - DRUPAL_USERNAME: admin
+  - DRUPAL_PASSWORD: "strongestpassword"
 # Specify Dependencies
 # MongoDB dependency configuration
 mongodb:

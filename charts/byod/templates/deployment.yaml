@@ -63,6 +63,14 @@ spec:
           env:
             - name: SOLR_URL
               value: {{ .Values.env.SOLR_URL }}
+            - name: OLLAMA_BASE_URL
+              value: {{ .Values.env.OLLAMA_BASE_URL }}
+            - name: DRUPAL_BASE_URL
+              value: {{ .Values.env.DRUPAL_BASE_URL }}
+            - name: DRUPAL_USERNAME
+              value: {{ .Values.env.DRUPAL_USERNAME }}
+            - name: DRUPAL_PASSWORD
+              value: {{ .Values.env.DRUPAL_PASSWORD }}
       {{- with .Values.volumes }}
       volumes:
         {{- toYaml . | nindent 8 }}
