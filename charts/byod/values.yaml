@@ -134,11 +134,11 @@ middleware:
 allowedOrigins: []
 
 env:
-  - SOLR_URL: http://localhost:8081/solr
-  - OLLAMA_BASE_URL: http://localhost:11434
-  - DRUPAL_BASE_URL: http://localhost:8080
-  - DRUPAL_USERNAME: admin
-  - DRUPAL_PASSWORD: "strongestpassword"
+  SOLR_URL: http://localhost:8081/solr
+  OLLAMA_BASE_URL: http://localhost:11434
+  DRUPAL_BASE_URL: http://localhost:8080
+  DRUPAL_USERNAME: admin
+  DRUPAL_PASSWORD: "strongestpassword"
 # Specify Dependencies
 # MongoDB dependency configuration
 mongodb:
