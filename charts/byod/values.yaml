@@ -148,10 +148,8 @@ mongodb:
     rootPassword: "admin"
     enabled: true
 # Solr configuration
-solr-operator:
+solr:
   enabled: true
-  image:
-    tag: 8.11
 
 # Ollama configuration
 ollama:

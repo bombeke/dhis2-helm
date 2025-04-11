@@ -15,7 +15,7 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.1.1
+version: 0.1.2
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
@@ -28,11 +28,11 @@ dependencies:
     version: "~16.4"
     repository: "https://charts.bitnami.com/bitnami"
     condition: mongodb.enabled
-  - name: "solr-operator"
-    verison: "~0.9"
-    reposistory: "https://solr.apache.org/charts"
-    condition: solr-operator.enabled
+  - name: "solr"
+    version: "~9.8"
+    reposistory: "https://charts.bitnami.com/bitnami"
+    condition: solr.enabled
   - name: ollama
-    verison: "~1"
+    version: "~1"
     reposistory: "https://otwld.github.io/ollama-helm"
     condition: ollama.enabled
