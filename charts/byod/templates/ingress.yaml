@@ -6,7 +6,6 @@ metadata:
   name: {{ include "byod.fullname" . }}
   labels:
     {{- include "byod.labels" . | nindent 4 }}
-  {{- with .Values.ingress.annotations }}
   annotations:
   {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
