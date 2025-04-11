@@ -58,12 +58,8 @@ spec:
           {{- end }}
 
           volumeMounts:
-            - name: {{ include "byod.fullname" . }}
-              mountPath: {{ .Values.byodHome }}
-              readOnly: false
-            - name: {{ include "byod.fullname" . }}-db
-              mountPath: {{ .Values.byodDbHome }}
-              readOnly: false
+            - name: byod-data
+              mountPath: /app/duckdb
           {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -74,8 +70,11 @@ spec:
               value: {{ $value | quote }}
             {{- end }}
           {{- end }}
-      {{- with .Values.volumes }}
       volumes:
+        - name: byod-data
+          persisentVolumeClaim:
+            claimName: {{ include "byod.fullname" . }}
+      {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.nodeSelector }}
@@ -90,3 +89,17 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+  {{- if .Values.storage.persisted }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ include "byod.fullname" . }}
+        labels:
+          {{- include "byod.labels" . | nindent 10 }}
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: {{ .Values.storage.volumeSize }}
+        storageClassName: {{ .Values.storage.className }}
+  {{- end }}
