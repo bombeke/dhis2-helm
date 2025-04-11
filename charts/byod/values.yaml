@@ -126,6 +126,9 @@ tolerations: []
 
 affinity: {}
 
+byodHome: "/opt/byod"
+byodDbHome: "/app/duckdb"
+
 middleware:
   headers:
     accessControlAllowHeaders: 

@@ -56,8 +56,15 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.volumeMounts }}
+
           volumeMounts:
+            - name: {{ include "byod.fullname" . }}
+              mountPath: {{ .Values.byodHome }}
+              readOnly: false
+            - name: {{ include "byod.fullname" . }}-db
+              mountPath: {{ .Values.byodDbHome }}
+              readOnly: false
+          {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- with .Values.env }}
