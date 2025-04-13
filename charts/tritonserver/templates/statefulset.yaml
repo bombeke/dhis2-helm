@@ -67,7 +67,7 @@ spec:
       
       volumes:
         - name: models
-          persisentVolumeClaim:
+          persistentVolumeClaim:
             claimName: {{ include "tritonserver.fullname" . }}
       {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
