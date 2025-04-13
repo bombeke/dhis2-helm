@@ -1,0 +1,15 @@
+{{- if and .Values.storage.persisted  }}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ include "byod.fullname" . }}
+  labels:
+    {{- include "byod.labels" . | nindent 10 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.storage.volumeSize }}
+  storageClassName: {{ .Values.storage.className }}
+{{- end }}
