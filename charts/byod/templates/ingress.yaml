@@ -41,9 +41,9 @@ spec:
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
 metadata:
-  name: {{ include "smartai.fullname" . }}-middleware
+  name: {{ include "byod.fullname" . }}-middleware
   labels:
-{{- include "smartai.labels" . | nindent 4 }}
+{{- include "byod.labels" . | nindent 4 }}
 spec:
   headers:
 {{- with .Values.middleware.headers }}
