@@ -1,9 +1,11 @@
+{{- if and .Values.ingress.enabled .Values.enabled -}}
+{{- $fullName := include "byod.fullname" . -}}
+{{- $svcPort := .Values.service.port -}}
 {{- $tls := hasKey .Values.ingress "certIssuer" -}}
-{{- if .Values.ingress.enabled -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "byod.fullname" . }}
+  name: {{ $fullName }}
   labels:
     {{- include "byod.labels" . | nindent 4 }}
   annotations:
@@ -16,36 +18,23 @@ metadata:
     ingress.kubernetes.io/ssl-redirect: "true"
   {{- end }}
 spec:
-  {{- with .Values.ingress.className }}
-  ingressClassName: {{ . }}
-  {{- end }}
-  {{- if .Values.ingress.tls }}
+  {{- if $tls }}
   tls:
-    {{- range .Values.ingress.tls }}
-    - hosts:
-        {{- range .hosts }}
-        - {{ . | quote }}
-        {{- end }}
-      secretName: {{ .secretName }}
-    {{- end }}
+    - secretName: {{ .Values.ingress.hostname | replace "." "-" }}-tls
+      hosts:
+        - {{ .Values.ingress.hostname | quote }}
   {{- end }}
   rules:
-    {{- range .Values.ingress.hosts }}
-    - host: {{ .host | quote }}
+    - host: {{ .Values.ingress.hostname | quote }}
       http:
         paths:
-          {{- range .paths }}
-          - path: {{ .path }}
-            {{- with .pathType }}
-            pathType: {{ . }}
-            {{- end }}
+          - path: {{ .Values.ingress.path }}
+            pathType: Prefix
             backend:
               service:
-                name: {{ include "byod.fullname" $ }}
+                name: {{ $fullName }}
                 port:
-                  number: {{ $.Values.service.port }}
-          {{- end }}
-    {{- end }}
+                  number: {{ $svcPort }}
 {{- end }}
 
 ---
