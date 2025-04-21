@@ -346,6 +346,17 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/byod-0.1.3/byod-0.1.3.tgz
     version: 0.1.3
+  byod-manager:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2025-04-21T11:18:12.159061909Z"
+    description: A Helm chart for Kubernetes
+    digest: f034b9b9e48de439c0aa2b89b7183e23de3917e83452ff4f3170db856e3fed00
+    name: byod-manager
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/byod-manager-0.1.0/byod-manager-0.1.0.tgz
+    version: 0.1.0
   certmanager:
   - apiVersion: v2
     appVersion: 1.16.1
@@ -2097,4 +2108,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2025-04-17T13:11:29.964451893Z"
+generated: "2025-04-21T11:18:12.960587935Z"
