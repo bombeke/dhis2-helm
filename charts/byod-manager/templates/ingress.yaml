@@ -1,0 +1,53 @@
+{{- if and .Values.ingress.enabled .Values.enabled -}}
+{{- $fullName := include "byod-manager.fullname" . -}}
+{{- $svcPort := .Values.service.port -}}
+{{- $tls := hasKey .Values.ingress "certIssuer" -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "byod-manager.labels" . | nindent 4 }}
+  annotations:
+  {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-{{include "byod-manager.fullname" . }}-middleware@kubernetescrd
+  {{- if $tls }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.certIssuer | quote }}
+    ingress.kubernetes.io/ssl-redirect: "true"
+  {{- end }}
+spec:
+  {{- if $tls }}
+  tls:
+    - secretName: {{ .Values.ingress.hostname | replace "." "-" }}-tls
+      hosts:
+        - {{ .Values.ingress.hostname | quote }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.hostname | quote }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullName }}
+                port:
+                  number: {{ $svcPort }}
+{{- end }}
+
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "byod-manager.fullname" . }}-middleware
+  labels:
+{{- include "byod-manager.labels" . | nindent 4 }}
+spec:
+  headers:
+{{- with .Values.middleware.headers }}
+  {{- toYaml . | nindent 4 }}
+{{- end }}
+    accessControlAllowOriginList:
+{{ toYaml .Values.allowedOrigins | nindent 6 }}
