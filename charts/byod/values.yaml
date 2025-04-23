@@ -160,6 +160,8 @@ mongodb:
 solr:
   enabled: true
 
+clickhouse:
+  enabled: true
 # Ollama configuration
 ollama:
   enabled: true
