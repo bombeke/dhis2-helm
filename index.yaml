@@ -3,6 +3,33 @@ entries:
   byod:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2025-05-01T12:07:55.523182158Z"
+    dependencies:
+    - condition: mongodb.enabled
+      name: mongodb
+      repository: https://charts.bitnami.com/bitnami
+      version: ~16.4
+    - condition: solr.enabled
+      name: solr
+      repository: https://charts.bitnami.com/bitnami
+      version: ~9
+    - condition: ollama.enabled
+      name: ollama
+      repository: https://otwld.github.io/ollama-helm
+      version: ~1
+    - condition: clickhouse.enabled
+      name: clickhouse
+      repository: https://charts.bitnami.com/bitnami
+      version: ~9
+    description: A Bombeke Data Beyod Platform Helm chart for Kubernetes
+    digest: b6894a59ecfa2588d351b9477a8a9f3625578bae44c31621db58f103e17c4e2f
+    name: byod
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/byod-0.1.19/byod-0.1.19.tgz
+    version: 0.1.19
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2025-04-23T16:14:49.045509397Z"
     dependencies:
     - condition: mongodb.enabled
@@ -376,6 +403,16 @@ entries:
   byod-manager:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2025-05-01T12:07:55.622520402Z"
+    description: A Helm chart for Kubernetes
+    digest: ea4bd42388c0a9ee09e6e79479c7baaa5b7f2f89638253ae819c73f90fe64a53
+    name: byod-manager
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/byod-manager-0.1.2/byod-manager-0.1.2.tgz
+    version: 0.1.2
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2025-04-23T16:14:49.213963018Z"
     description: A Helm chart for Kubernetes
     digest: 77cbb5a55b6058a8974257d13605cbe25fedb46423af320492cc75fd2cff5c1c
@@ -466,6 +503,33 @@ entries:
     - https://github.com/bombeke/dhis2-helm/releases/download/certmanager-0.1.0/certmanager-0.1.0.tgz
     version: 0.1.0
   core:
+  - apiVersion: v2
+    appVersion: 41.2.0
+    created: "2025-05-01T12:07:55.775511739Z"
+    dependencies:
+    - condition: redis.enabled
+      name: redis
+      repository: https://charts.bitnami.com/bitnami
+      version: ~20
+    - condition: postgresql.enabled
+      name: postgresql
+      repository: https://charts.bitnami.com/bitnami
+      version: ~12
+    - condition: mariadb.enabled
+      name: mariadb
+      repository: https://charts.bitnami.com/bitnami
+      version: ~19
+    - condition: casdoor-helm-charts.enabled
+      name: casdoor-helm-charts
+      repository: oci://registry-1.docker.io/casbin
+      version: v1.855.0
+    description: DHIS 2 Helm Chart
+    digest: fab3aeb774bc8f4dad06fc05a783963c72ed5f97ebc996ae9ef5c0d7d7eb5408
+    name: core
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/core-1.0.45/core-1.0.45.tgz
+    version: 1.0.45
   - apiVersion: v2
     appVersion: 41.2.0
     created: "2025-03-06T08:33:01.356219269Z"
@@ -1911,6 +1975,25 @@ entries:
   smartai:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2025-05-01T12:07:56.221884258Z"
+    dependencies:
+    - condition: mongodb.enabled
+      name: mongodb
+      repository: https://charts.bitnami.com/bitnami
+      version: ~16.4
+    - condition: redis.enabled
+      name: redis
+      repository: https://charts.bitnami.com/bitnami
+      version: ~20
+    description: A Helm chart for Kubernetes
+    digest: 66526c6e30d77e7e339446bc489cf6e1935c0ff1092db841daa0f9a8e4e756fe
+    name: smartai
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/smartai-0.1.12/smartai-0.1.12.tgz
+    version: 0.1.12
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2025-03-21T19:22:32.93570407Z"
     dependencies:
     - condition: mongodb.enabled
@@ -2066,6 +2149,16 @@ entries:
   tritonserver:
   - apiVersion: v2
     appVersion: 24.12.0
+    created: "2025-05-01T12:07:56.333514457Z"
+    description: A Helm chart for Kubernetes
+    digest: 596121f8c01dc226c448c1f5a31e882b5280cb8ff3a80e1d3475be4e63f797b6
+    name: tritonserver
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/tritonserver-0.1.5/tritonserver-0.1.5.tgz
+    version: 0.1.5
+  - apiVersion: v2
+    appVersion: 24.12.0
     created: "2025-02-13T16:29:56.002646444Z"
     description: A Helm chart for Kubernetes
     digest: db69870b74a2f43a70f32caaf4da752891822b8eaf571b2010aae8db7fafb5e0
@@ -2107,6 +2200,16 @@ entries:
   web:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2025-05-01T12:07:56.456714428Z"
+    description: Web App chart
+    digest: 66e15efd60f3d81afd8d8170a504698973da9277ca20cf9a4142ad4dfd1b0121
+    name: web
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.4/web-0.1.4.tgz
+    version: 0.1.4
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2025-01-27T07:45:03.905191071Z"
     description: Web App chart
     digest: b234e169724392293290d181dbecd30a62311ebbbc45d407997811a209ae2e20
@@ -2145,4 +2248,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2025-04-23T16:14:49.869674755Z"
+generated: "2025-05-01T12:07:56.45736145Z"
