@@ -151,3 +151,8 @@ env:
   DHIS2_BASE_URL: "http://localhost:8080"
   DHIS2_USERNAME: admin
   DHIS2_PASSWORD: "district"
+  CLICKHOUSE_HOST: "localhost"
+  CLICKHOUSE_PORT: 9000
+  CLICKHOUSE_DATABASE: "default"
+  CLICKHOUSE_USERNAME: "default"
+  CLICKHOUSE_PASSWORD: ""
