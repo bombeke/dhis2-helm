@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<schema name="example" version="1.6">
+  <!-- Field Definitions -->
+  <fields>
+    <!-- Unique identifier field -->
+    <field name="id" type="string" indexed="true" stored="true" required="true" multiValued="false" />
+    
+    <!-- Text fields for name and short_name -->
+    <field name="name" type="text_general" indexed="true" required="true" stored="true" multiValued="false" />
+    <field name="short_name" type="text_general" indexed="true" stored="true" multiValued="false" />
+    <field name="metadata_type" type="string" indexed="true" required="true" stored="true" multiValued="false" />
+    <field name="code" type="string" indexed="true" multiValued="false" />
+    <field name="periodType" type="string" indexed="true" stored="true" />
+    <field name="level" type="int" indexed="true" multiValued="false" />
+    <field name="parent_name" type="text_general" indexed="true" stored="true" />
+    <field name="parent_id" type="string" indexed="true" stored="true" />
+    <field name="description" type="text_general" indexed="true" stored="true" multiValued="false" />
+    <field name="aggregation_type" type="string" indexed="true" stored="true" multiValued="false" />
+    <field name="category_combo_id" type="string" indexed="true" stored="true" multiValued="false" />
+    <!-- Vector field for metadata_embedding -->
+    <field name="metadata_embedding" type="knn_vector" indexed="true" stored="true" multiValued="false" />
+    <field name="_version_" type="plong" indexed="false" stored="false" />
+  </fields>
+
+  <!-- Unique key field -->
+  <uniqueKey>id</uniqueKey>
+
+  <!-- Field Types -->
+  <types>
+    <!-- Standard string type for the id field -->
+    <fieldType name="string" class="solr.StrField" sortMissingLast="true" />
+
+    <!-- Text field type for general text analysis -->
+    <fieldType name="text_general" class="solr.TextField" positionIncrementGap="100">
+      <analyzer type="index">
+        <tokenizer class="solr.StandardTokenizerFactory" />
+        <filter class="solr.StopFilterFactory" ignoreCase="true" words="stopwords.txt" />
+        <filter class="solr.LowerCaseFilterFactory" />
+      </analyzer>
+      <analyzer type="query">
+        <tokenizer class="solr.StandardTokenizerFactory" />
+        <filter class="solr.StopFilterFactory" ignoreCase="true" words="stopwords.txt" />
+        <filter class="solr.SynonymGraphFilterFactory" synonyms="synonyms.txt" ignoreCase="true" expand="true" />
+        <filter class="solr.LowerCaseFilterFactory" />
+      </analyzer>
+    </fieldType>
+
+    <!-- Vector field type for storing embeddings -->
+    <fieldType name="knn_vector" class="solr.DenseVectorField" vectorDimension="1024" similarityFunction="cosine" />
+    <fieldType name="plong" class="solr.LongPointField" docValues="true" />
+    <fieldType name="int" class="solr.TrieIntField" precisionStep="8" positionIncrementGap="0" />
+  </types>
+</schema>

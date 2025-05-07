@@ -163,7 +163,33 @@ mongodb:
     enabled: true
 # Solr configuration
 solr:
-  enabled: true
+  enabled: true 
+  # Add init containers via the dependency values
+  initContainers:
+    - name: solr-init
+      image: bitnami/solr:latest
+      command: ["/bin/bash", "/scripts/init-solr.sh"]
+      volumeMounts:
+        - name: init-script
+          mountPath: /scripts/init-solr.sh
+          subPath: init-solr.sh
+        - name: configsets
+          mountPath: /configsets
+
+  extraVolumes:
+    - name: init-script
+      configMap:
+        name: {{ include "fullname" . }}-solr-init
+    - name: configsets
+      configMap:
+        name: {{ include "fullname" . }}-solr-config
+
+  extraVolumeMounts:
+    - name: init-script
+      mountPath: /scripts/init-solr.sh
+      subPath: init-solr.sh
+    - name: configsets
+      mountPath: /configsets
 
 clickhouse:
   enabled: true
