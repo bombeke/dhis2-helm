@@ -5,6 +5,8 @@ metadata:
   name: {{ include "byod-manager.fullname" . }}
   labels:
     {{- include "byod-manager.labels" . | nindent 10 }}
+  annotations:
+    "helm.sh/resource-policy": keep
 spec:
   accessModes:
     - ReadWriteOnce

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<config>
+  <luceneMatchVersion>9.8.0</luceneMatchVersion>
+
+  <dataDir>${solr.data.dir:}</dataDir>
+
+  <directoryFactory name="DirectoryFactory" class="${solr.directoryFactory:solr.NRTCachingDirectoryFactory}"/>
+
+  <schemaFactory class="ClassicIndexSchemaFactory"/>
+
+  <updateHandler class="solr.DirectUpdateHandler2">
+    <updateLog>
+      <str name="dir">${solr.ulog.dir:}</str>
+    </updateLog>
+    <autoCommit>
+      <maxTime>${solr.autoCommit.maxTime:15000}</maxTime>
+      <openSearcher>false</openSearcher>
+    </autoCommit>
+    <autoSoftCommit>
+      <maxTime>${solr.autoSoftCommit.maxTime:5000}</maxTime>
+    </autoSoftCommit>
+  </updateHandler>
+
+  <requestHandler name="/select" class="solr.SearchHandler">
+    <lst name="defaults">
+      <str name="echoParams">explicit</str>
+      <int name="rows">10</int>
+      <bool name="spellcheck">true</bool>
+      <int name="spellcheck.count">2</int>
+      <str name="df">name</str>
+    </lst>
+    <arr name="last-components">
+      <str>spellcheck</str>
+    </arr>
+  </requestHandler>
+
+  <requestHandler name="/update" class="solr.UpdateRequestHandler" />
+
+  <!-- Ping handler to check if Solr is running -->
+   <requestHandler name="/admin/ping" class="solr.PingRequestHandler">
+    <lst name="invariants">
+      <str name="q">*:*</str> <!-- Default query to use for pinging -->
+    </lst>
+    <lst name="defaults">
+      <str name="echoParams">all</str>
+    </lst>
+  </requestHandler>
+  <searchComponent name="spellcheck" class="solr.SpellCheckComponent">
+    <lst name="spellchecker">
+        <str name="name">default</str>
+        <str name="field">name</str>  <!-- The field to use for spelling suggestions -->
+        <str name="classname">solr.DirectSolrSpellChecker</str>
+        <str name="distanceMeasure">internal</str>
+        <float name="accuracy">0.5</float>
+        <int name="maxEdits">2</int>
+        <int name="minPrefix">1</int>
+        <str name="spellcheckIndexDir">spellchecker</str>
+        <int name="maxInspections">5</int>
+        <int name="minQueryLength">4</int>
+        <float name="maxQueryFrequency">0.01</float>
+        <str name="buildOnCommit">true</str>
+    </lst>
+</searchComponent>
+
+<requestHandler name="/spell" class="solr.SearchHandler">
+    <lst name="defaults">
+        <str name="spellcheck">on</str>
+        <str name="spellcheck.extendedResults">true</str>
+        <str name="spellcheck.count">2</str> <!-- Number of suggestions -->
+        <str name="spellcheck.alternativeTermCount">2</str>
+    </lst>
+    <arr name="components">
+        <str>spellcheck</str>
+    </arr>
+</requestHandler>
+</config>
