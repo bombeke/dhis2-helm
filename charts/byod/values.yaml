@@ -179,10 +179,10 @@ solr:
   extraVolumes:
     - name: init-script
       configMap:
-        name: {{ include "fullname" . }}-solr-init
+        name: byod-solr-init
     - name: configsets
       configMap:
-        name: {{ include "fullname" . }}-solr-config
+        name: byod-solr-config
 
   extraVolumeMounts:
     - name: init-script
