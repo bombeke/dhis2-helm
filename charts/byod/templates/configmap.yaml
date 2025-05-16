@@ -5,18 +5,13 @@ metadata:
   labels:
     {{- include "byod.labels" . | nindent 4 }}
 data:
-  solrconfig.xml: |-
-    {{- .Files.Get "configsets/bombeke_dev/conf/solrconfig.xml" | nindent 4 }}
-  stopwords.txt: |-
-    {{- .Files.Get "configsets/bombeke_dev/conf/stopwords.txt" | nindent 4 }}
-  schema.xml: |-
-    {{- .Files.Get "configsets/bombeke_dev/conf/schema.xml" | nindent 4 }}
-  synonyms.txt: |-
-    {{- .Files.Get "configsets/bombeke_dev/conf/synonyms.txt" | nindent 4 }}
   init-solr.sh: |-
     #!/bin/bash
     set -e
 
+    echo "Initializing Solr..."
+    ls -l /configsets/conf
+    
     echo "Waiting for Solr to be ready..."
     until curl -s "http://{{ include "byod.fullname" . }}-solr:8983/solr/admin/cores?action=STATUS" -u "{{ .Values.solr.auth.adminUsername }}:{{ .Values.solr.auth.adminPassword }}" > /dev/null; do
       sleep 5
@@ -41,3 +36,21 @@ data:
     echo "Building spellcheck dictionary..."
     curl "http://{{ include "byod.fullname" . }}-solr:8983/solr/bombekecollection/spell?spellcheck.build=true" \
       -u "{{ .Values.solr.auth.adminUsername }}:{{ .Values.solr.auth.adminPassword }}"
+
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "byod.fullname" . }}-solr-config
+  labels:
+    {{- include "byod.labels" . | nindent 4 }}
+data:
+  solrconfig.xml: |-
+    {{- .Files.Get "configsets/bombeke_dev/conf/solrconfig.xml" | nindent 4 }}
+  stopwords.txt: |-
+    {{- .Files.Get "configsets/bombeke_dev/conf/stopwords.txt" | nindent 4 }}
+  schema.xml: |-
+    {{- .Files.Get "configsets/bombeke_dev/conf/schema.xml" | nindent 4 }}
+  synonyms.txt: |-
+    {{- .Files.Get "configsets/bombeke_dev/conf/synonyms.txt" | nindent 4 }}
