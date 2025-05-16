@@ -189,7 +189,8 @@ solr:
       mountPath: /scripts/init-solr.sh
       subPath: init-solr.sh
     - name: configsets
-      mountPath: /configsets
+      mountPath: /configsets/conf
+      subPath: conf
 
 clickhouse:
   enabled: true
