@@ -3,7 +3,7 @@ kind: ConfigMap
 metadata:
   name: byod-solr-init
   labels:
-    {{- include "labels" . | nindent 4 }}
+    {{- include "byod.labels" . | nindent 4 }}
 data:
   conf/solrconfig.xml: |-
     {{ .Files.Get "configsets/bombeke_dev/conf/solrconfig.xml" | indent 4 }}
