@@ -22,7 +22,7 @@ data:
       sleep 5
     done
 
-    ZK_HOST="{{ .Values.solr.zookeeper.enabled | ternary (printf "%s-solr-zookeeper:2181" (include "byod.fullname" .)) .Values.solr.zookeeper.external.hosts }}:{{ .Values.solr.zookeeper.external.port | default 2181 }}"
+    ZK_HOST="{{ .Values.solr.zookeeper.enabled | ternary (printf "%s-solr-zookeeper:2181" (include "byod.fullname" .)) .Values.solr.zookeeper.externalZookeeper.servers }}:{{ .Values.solr.zookeeper.containerPorts.client | default 2181 }}"
 
     echo "Uploading configset to ZooKeeper..."
     /opt/bitnami/solr/bin/solr zk upconfig -n bombeke_dev \
