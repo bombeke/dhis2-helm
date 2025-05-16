@@ -18,11 +18,11 @@ data:
     set -e
 
     echo "Waiting for Solr to be ready..."
-    until curl -s "http://{{ include "fullname" . }}-solr:8983/solr/admin/cores?action=STATUS" -u "{{ .Values.solr.auth.adminUsername }}:{{ .Values.solr.auth.adminPassword }}" > /dev/null; do
+    until curl -s "http://{{ include "byod.fullname" . }}-solr:8983/solr/admin/cores?action=STATUS" -u "{{ .Values.solr.auth.adminUsername }}:{{ .Values.solr.auth.adminPassword }}" > /dev/null; do
       sleep 5
     done
 
-    ZK_HOST="{{ .Values.solr.zookeeper.enabled | ternary (printf "%s-solr-zookeeper:2181" (include "fullname" .)) .Values.solr.zookeeper.external.hosts }}:{{ .Values.solr.zookeeper.external.port | default 2181 }}"
+    ZK_HOST="{{ .Values.solr.zookeeper.enabled | ternary (printf "%s-solr-zookeeper:2181" (include "byod.fullname" .)) .Values.solr.zookeeper.external.hosts }}:{{ .Values.solr.zookeeper.external.port | default 2181 }}"
 
     echo "Uploading configset to ZooKeeper..."
     /opt/bitnami/solr/bin/solr zk upconfig -n bombeke_dev \
@@ -30,7 +30,7 @@ data:
       -z ${ZK_HOST}
 
     echo "Creating collection..."
-    curl "http://{{ include "fullname" . }}-solr:8983/solr/admin/collections?action=CREATE&name=bombekecollection&numShards=1&replicationFactor=1&collection.configName=bombeke_dev" -u "{{ .Values.solr.auth.adminUsername }}:{{ .Values.solr.auth.adminPassword }}"
+    curl "http://{{ include "byod.fullname" . }}-solr:8983/solr/admin/collections?action=CREATE&name=bombekecollection&numShards=1&replicationFactor=1&collection.configName=bombeke_dev" -u "{{ .Values.solr.auth.adminUsername }}:{{ .Values.solr.auth.adminPassword }}"
 
     echo "Building spellcheck dictionary..."
-    curl "http://{{ include "fullname" . }}-solr:8983/solr/bombekecollection/spell?spellcheck.build=true" -u "{{ .Values.solr.auth.adminUsername }}:{{ .Values.solr.auth.adminPassword }}"
+    curl "http://{{ include "byod.fullname" . }}-solr:8983/solr/bombekecollection/spell?spellcheck.build=true" -u "{{ .Values.solr.auth.adminUsername }}:{{ .Values.solr.auth.adminPassword }}"
