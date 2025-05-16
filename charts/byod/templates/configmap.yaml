@@ -5,13 +5,13 @@ metadata:
   labels:
     {{- include "byod.labels" . | nindent 4 }}
 data:
-  conf/solrconfig.xml: |-
+  solrconfig.xml: |-
     {{- .Files.Get "configsets/bombeke_dev/conf/solrconfig.xml" | nindent 4 }}
-  conf/stopwords.txt: |-
+  stopwords.txt: |-
     {{- .Files.Get "configsets/bombeke_dev/conf/stopwords.txt" | nindent 4 }}
-  conf/schema.xml: |-
+  schema.xml: |-
     {{- .Files.Get "configsets/bombeke_dev/conf/schema.xml" | nindent 4 }}
-  conf/synonyms.txt: |-
+  synonyms.txt: |-
     {{- .Files.Get "configsets/bombeke_dev/conf/synonyms.txt" | nindent 4 }}
   init-solr.sh: |-
     #!/bin/bash
@@ -30,7 +30,7 @@ data:
 
     echo "Uploading configset to ZooKeeper..."
     /opt/bitnami/solr/bin/solr zk upconfig -n bombeke_dev \
-      -d /configsets \
+      -d /configsets/conf \
       -z ${ZK_HOST} \
       -u "{{ .Values.solr.auth.adminUsername }}:{{ .Values.solr.auth.adminPassword }}"
 
