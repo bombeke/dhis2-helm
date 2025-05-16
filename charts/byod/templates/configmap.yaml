@@ -21,8 +21,11 @@ data:
     until curl -s "http://{{ include "byod.fullname" . }}-solr:8983/solr/admin/cores?action=STATUS" -u "{{ .Values.solr.auth.adminUsername }}:{{ .Values.solr.auth.adminPassword }}" > /dev/null; do
       sleep 5
     done
-
-    ZK_HOST="{{ .Values.solr.zookeeper.enabled | ternary (printf "%s-solr-zookeeper:2181" (include "byod.fullname" .)) .Values.solr.zookeeper.externalZookeeper.servers }}:{{ .Values.solr.zookeeper.containerPorts.client | default 2181 }}"
+    {{- if .Values.solr.zookeeper.enabled }}
+    ZK_HOST="{{ include "byod.fullname" . }}-solr-zookeeper:2181"
+    {{- else }}
+    ZK_HOST="{{ .Values.solr.zookeeper.externalZookeeper.servers | default "zookeeper:2181" }}"
+    {{- end }}
 
     echo "Uploading configset to ZooKeeper..."
     /opt/bitnami/solr/bin/solr zk upconfig -n bombeke_dev \
