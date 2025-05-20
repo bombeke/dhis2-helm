@@ -32,12 +32,12 @@ data:
     set -e
 
     echo "Waiting for Zookeeper to be ready..."
-    ZK_HOST="${ZK_HOST_VAR}"
-    ZK_PORT="${ZK_PORT_VAR}"
-    until nc -z $ZK_HOST $ZK_PORT ; do
-      echo "Waiting for Zookeeper at $ZK_HOST $ZK_PORT ..."
-      sleep 5
-    done
+    #ZK_HOST="${ZK_HOST_VAR}"
+    #ZK_PORT="${ZK_PORT_VAR}"
+    #until nc -z $ZK_HOST $ZK_PORT ; do
+    #  echo "Waiting for Zookeeper at $ZK_HOST $ZK_PORT ..."
+    #  sleep 5
+    #done
     
 
     echo "Uploading configset to ZooKeeper..."
