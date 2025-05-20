@@ -38,14 +38,13 @@ data:
     #until nc -z $ZK_HOST $ZK_PORT ; do
     #  echo "Waiting for Zookeeper at $ZK_HOST $ZK_PORT ..."
     #  sleep 5
-    #done
-    mkdir -p /configsets/conf 
-    cp -r /configsets/*.* /configsets/conf
-    
+    #done 
+    ls -l /configsets
+       
 
     echo "Uploading configset to ZooKeeper..."
     /opt/bitnami/solr/bin/solr zk upconfig -n bombeke_dev \
-      -d /configsets/conf \
+      -d /configsets \
       -z {{ include "byod.fullname" . }}-zookeeper:2181
 
  
