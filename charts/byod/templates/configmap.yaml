@@ -44,10 +44,10 @@ data:
     echo "Uploading configset to ZooKeeper..."
     /opt/bitnami/solr/bin/solr zk upconfig -n bombeke_dev \
       -d /configsets/conf \
-      -z ${BYOD_ZOOKEEPER_SERVICE_HOST}:${ZOOKEEPER_SERVICE_PORT}
+      -z {{ include "byod.fullname" . }}-zookeeper:2181
 
-    echo "ZOO KEEPERS: {{ include "solr.zookeeper.hosts" . | quote }}"
-    
+ 
+
     echo "Creating collection..."
     curl "http://{{ include "byod.fullname" . }}-solr:8983/solr/admin/collections?action=CREATE&name=bombekecollection&numShards=1&replicationFactor=1&collection.configName=bombeke_dev" \
       -u "{{ .Values.solr.auth.adminUsername }}:{{ .Values.solr.auth.adminPassword }}"
@@ -55,6 +55,8 @@ data:
     echo "Building spellcheck dictionary..."
     curl "http://{{ include "byod.fullname" . }}-solr:8983/solr/bombekecollection/spell?spellcheck.build=true" \
       -u "{{ .Values.solr.auth.adminUsername }}:{{ .Values.solr.auth.adminPassword }}"
+
+    echo "ZOO KEEPERS: {{ include "solr.zookeeper.hosts" . | quote }}"
 
 
 ---
