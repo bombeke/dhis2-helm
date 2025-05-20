@@ -164,6 +164,9 @@ mongodb:
 # Solr configuration
 solr:
   enabled: true
+  image:
+    repository: talexie/coms_manager-solr
+    tag: 1.0.0
   auth:
     adminUsername: admin
     adminPassword: "password"
@@ -171,7 +174,7 @@ solr:
   # Add init containers via the dependency values
   initContainers:
     - name: solr-init
-      image: bitnami/solr
+      image: talexie/coms_manager-solr
       command: ["/bin/bash", "/scripts/init-solr.sh"]
       volumeMounts:
         - name: init-script

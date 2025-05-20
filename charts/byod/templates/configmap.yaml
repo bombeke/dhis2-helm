@@ -37,12 +37,11 @@ data:
       echo "Waiting for Zookeeper at {{ include "byod.fullname" . }}-zookeeper:2181 ..."
       sleep 5
     done 
-    mkdir -p /opt/bitnami/solr/bombeke
-    cp -r /configsets/* /opt/bitnami/solr/bombeke
+    ls -l /opt/bitnami/configsets
 
     echo "Uploading configset to ZooKeeper..."
     /opt/bitnami/solr/bin/solr zk upconfig -n bombeke_dev \
-      -d /opt/bitnami/solr/bombeke \
+      -d /opt/bitnami/configsets \
       -z {{ include "byod.fullname" . }}-zookeeper:2181
 
  
