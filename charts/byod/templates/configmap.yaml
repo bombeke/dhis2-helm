@@ -30,8 +30,10 @@ data:
     set -e
 
     echo "Waiting for Zookeeper to be ready..."
-    until nc -z {{ print (include "byod.fullname" .) "_ZOOKEEPER_SERVICE_HOST" | upper }} {{ print (include "byod.fullname" .) "_ZOOKEEPER_SERVICE_PORT" | upper }}; do
-      echo "Waiting for Zookeeper at {{ print (include "byod.fullname" .) "-solr-init" | upper }} ..."
+    ZK_HOST={{ print (include "byod.fullname" .) "_ZOOKEEPER_SERVICE_HOST" | upper }}
+    ZK_PORT={{ print (include "byod.fullname" .) "_ZOOKEEPER_SERVICE_PORT" | upper }}
+    until nc -z ${ZK_HOST} ${ZK_PORT} ; do
+      echo "Waiting for Zookeeper at ${ZK_HOST} ${ZK_PORT} ..."
       sleep 5
     done
     
