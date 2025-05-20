@@ -181,8 +181,7 @@ solr:
           mountPath: /scripts/create-collections.sh
           subPath: create-collections.sh
         - name: configsets
-          mountPath: /configsets/conf
-          subPath: conf
+          mountPath: /configsets
 
   extraVolumes:
     - name: init-script
@@ -200,8 +199,7 @@ solr:
       mountPath: /scripts/create-collections.sh
       subPath: create-collections.sh
     - name: configsets
-      mountPath: /configsets/conf
-      subPath: conf
+      mountPath: /configsets
 
 clickhouse:
   enabled: true

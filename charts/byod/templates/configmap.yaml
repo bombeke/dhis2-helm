@@ -39,6 +39,8 @@ data:
     #  echo "Waiting for Zookeeper at $ZK_HOST $ZK_PORT ..."
     #  sleep 5
     #done
+    mkdir -p /configsets/conf 
+    cp -r /configsets/*.* /configsets/conf
     
 
     echo "Uploading configset to ZooKeeper..."
