@@ -3,6 +3,33 @@ entries:
   byod:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2025-05-20T08:02:39.975397748Z"
+    dependencies:
+    - condition: mongodb.enabled
+      name: mongodb
+      repository: https://charts.bitnami.com/bitnami
+      version: ~16.4
+    - condition: solr.enabled
+      name: solr
+      repository: https://charts.bitnami.com/bitnami
+      version: ~9
+    - condition: ollama.enabled
+      name: ollama
+      repository: https://otwld.github.io/ollama-helm
+      version: ~1
+    - condition: clickhouse.enabled
+      name: clickhouse
+      repository: https://charts.bitnami.com/bitnami
+      version: ~9
+    description: A Bombeke Data Beyod Platform Helm chart for Kubernetes
+    digest: d2938b2447cfff564192cb1bd7b7c49543ff907cf3534f7717c0890ef3a32f9a
+    name: byod
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/byod-0.1.30/byod-0.1.30.tgz
+    version: 0.1.30
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2025-05-16T15:04:26.109983164Z"
     dependencies:
     - condition: mongodb.enabled
@@ -2501,4 +2528,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2025-05-16T15:04:27.747559773Z"
+generated: "2025-05-20T08:02:40.734389023Z"
