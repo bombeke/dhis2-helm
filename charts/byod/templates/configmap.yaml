@@ -56,8 +56,6 @@ data:
     curl "http://{{ include "byod.fullname" . }}-solr:8983/solr/bombekecollection/spell?spellcheck.build=true" \
       -u "{{ .Values.solr.auth.adminUsername }}:{{ .Values.solr.auth.adminPassword }}"
 
-    echo "ZOO KEEPERS: {{ include "solr.zookeeper.hosts" . | quote }}"
-
 
 ---
 apiVersion: v1
