@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "byod.fullname" . }}-solr-init-job
+  labels:
+    {{- include "byod.labels" . | nindent 4 }}
+  annotations:
+    # This ensures the job is run after Helm install/upgrade
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: solr-init-job
+        image: talexie/coms_manager-solr
+        command: ["/bin/bash", "/scripts/init-solr.sh"]
+        volumeMounts:
+        - name: init-script
+          mountPath: /scripts
+        env:
+        - name: SOLR_OPTS
+          value: "-Dsolr.install.dir=/opt/bitnami/solr"
+      volumes:
+      - name: init-script
+        configMap:
+          name: {{ include "byod.fullname" . }}-solr-init
+          defaultMode: 0755
