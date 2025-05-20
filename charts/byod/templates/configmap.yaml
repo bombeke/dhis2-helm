@@ -33,18 +33,17 @@ data:
 
     echo "Waiting for Zookeeper to be ready..."
 
-    #ZK_HOST="${ZK_HOST_VAR}"
-    #ZK_PORT="${ZK_PORT_VAR}"
-    #until nc -z $ZK_HOST $ZK_PORT ; do
-    #  echo "Waiting for Zookeeper at $ZK_HOST $ZK_PORT ..."
-    #  sleep 5
-    #done 
-    ls -l /configsets
-       
+    until nc -z {{ include "byod.fullname" . }}-zookeeper 2181 ; do
+      echo "Waiting for Zookeeper at {{ include "byod.fullname" . }}-zookeeper:2181 ..."
+      sleep 5
+    done 
+    
+    cp -r /configsets/* /tmp/configsets
+    
 
     echo "Uploading configset to ZooKeeper..."
     /opt/bitnami/solr/bin/solr zk upconfig -n bombeke_dev \
-      -d /configsets \
+      -d /tmp/configsets \
       -z {{ include "byod.fullname" . }}-zookeeper:2181
 
  
