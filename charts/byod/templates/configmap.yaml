@@ -5,6 +5,8 @@ metadata:
   labels:
     {{- include "byod.labels" . | nindent 4 }}
 data:
+  ZK_HOST_VAR: {{ print (include "byod.fullname" . | upper) "_ZOOKEEPER_SERVICE_HOST" }}
+  ZK_PORT_VAR: {{ print (include "byod.fullname" . | upper) "_ZOOKEEPER_SERVICE_PORT" }}
   create-collections.sh: |
     #!/bin/bash
     set -e
@@ -30,9 +32,8 @@ data:
     set -e
 
     echo "Waiting for Zookeeper to be ready..."
-    ZK_UPPER="{{ include "byod.fullname" . | upper }}"
-    ZK_HOST="${ZK_UPPER}_ZOOKEEPER_SERVICE_HOST"
-    ZK_PORT="${ZK_UPPER}_ZOOKEEPER_SERVICE_PORT"
+    ZK_HOST="${ZK_HOST_VAR}"
+    ZK_PORT="${ZK_PORT_VAR}"
     until nc -z $ZK_HOST $ZK_PORT ; do
       echo "Waiting for Zookeeper at $ZK_HOST $ZK_PORT ..."
       sleep 5
