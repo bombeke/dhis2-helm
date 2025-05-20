@@ -30,10 +30,8 @@ data:
     set -e
 
     echo "Waiting for Zookeeper to be ready..."
-    # Get the first ZK host from the comma-separated list
-    FIRST_ZK_HOST=$(echo "${SOLR_ZK_HOSTS}" | cut -d'/' -f1 | cut -d',' -f1)
-    until nc -z ${FIRST_ZK_HOST%:*} ${FIRST_ZK_HOST#*:}; do
-      echo "Waiting for Zookeeper at ${FIRST_ZK_HOST}..."
+    until nc -z {{ print (include "byod.fullname" .) "_ZOOKEEPER_SERVICE_HOST" | upper }} {{ print (include "byod.fullname" .) "_ZOOKEEPER_SERVICE_PORT" | upper }}; do
+      echo "Waiting for Zookeeper at {{ print (include "byod.fullname" .) "-solr-init" | upper }} ..."
       sleep 5
     done
     
