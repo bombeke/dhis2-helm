@@ -5,29 +5,37 @@ metadata:
   labels:
     {{- include "byod.labels" . | nindent 4 }}
 data:
+  create-collections.sh: |
+    #!/bin/bash
+    set -e
+    
+    echo "Waiting for Zookeeper to be ready..."
+    until nc -z ${SOLR_ZK_HOSTS%/*} ${SOLR_ZK_HOSTS#*:}; do
+      sleep 5
+    done
+    
+    echo "Waiting for Solr to be ready..."
+    until curl -s "http://$HOSTNAME:8983/solr/admin/collections?action=LIST"; do
+      sleep 5
+    done
+    
+    # Create collections
+    curl "http://$HOSTNAME:8983/solr/admin/collections?action=CREATE&name=products&numShards=3&replicationFactor=2"
+
   init-solr.sh: |-
     #!/bin/bash
     set -e
 
-    echo "Initializing Solr..."
-    ls -l /configsets/conf
-    
-    echo "Waiting for Solr to be ready..."
-    until curl -s "http://{{ include "byod.fullname" . }}-solr:8983/solr/admin/cores?action=STATUS" -u "{{ .Values.solr.auth.adminUsername }}:{{ .Values.solr.auth.adminPassword }}" > /dev/null; do
+    echo "Waiting for Zookeeper to be ready..."
+    until nc -z ${SOLR_ZK_HOSTS%/*} ${SOLR_ZK_HOSTS#*:}; do
       sleep 5
     done
     
-    {{- if .Values.solr.zookeeper.enabled }}
-    ZK_HOST="{{ include "byod.fullname" . }}-solr-zookeeper:2181"
-    {{- else }}
-    ZK_HOST="{{ .Values.solr.zookeeper.externalZookeeper.servers | default "zookeeper:2181" }}"
-    {{- end }}
 
     echo "Uploading configset to ZooKeeper..."
     /opt/bitnami/solr/bin/solr zk upconfig -n bombeke_dev \
       -d /configsets/conf \
-      -z ${ZK_HOST} \
-      -u "{{ .Values.solr.auth.adminUsername }}:{{ .Values.solr.auth.adminPassword }}"
+      -z ${SOLR_ZK_HOSTS}
 
     echo "Creating collection..."
     curl "http://{{ include "byod.fullname" . }}-solr:8983/solr/admin/collections?action=CREATE&name=bombekecollection&numShards=1&replicationFactor=1&collection.configName=bombeke_dev" \

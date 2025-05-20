@@ -86,6 +86,30 @@ api:
 database:
  url: "localhost"
  password: "password"
+smtp_settings:
+  default:
+    server: "smtp.example.com"
+    port: 587
+    username: "your_username@example.com"
+    password: "your_password"
+    use_tls: true
+    timeout: 10
+    
+  gmail:
+    server: "smtp.gmail.com"
+    port: 587
+    username: "your@gmail.com"
+    password: "your_app_password"  # Use app password for Gmail
+    use_tls: true
+    timeout: 10
+    
+  no_tls_example:
+    server: "mail.oldserver.com"
+    port: 25
+    username: "user@oldserver.com"
+    password: "oldpassword"
+    use_tls: false
+    timeout: 10
 ```
 ## Installing AI/ML Inference Service
 [AI/ML Inference server helm chart](./charts/tritonserver) is published to
