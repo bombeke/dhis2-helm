@@ -10,7 +10,10 @@ data:
     set -e
     
     echo "Waiting for Zookeeper to be ready..."
-    until nc -z ${SOLR_ZK_HOSTS%/*} ${SOLR_ZK_HOSTS#*:}; do
+    # Get the first ZK host from the comma-separated list
+    FIRST_ZK_HOST=$(echo "${SOLR_ZK_HOSTS}" | cut -d'/' -f1 | cut -d',' -f1)
+    until nc -z ${FIRST_ZK_HOST%:*} ${FIRST_ZK_HOST#*:}; do
+      echo "Waiting for Zookeeper at ${FIRST_ZK_HOST}..."
       sleep 5
     done
     
@@ -27,7 +30,10 @@ data:
     set -e
 
     echo "Waiting for Zookeeper to be ready..."
-    until nc -z ${SOLR_ZK_HOSTS%/*} ${SOLR_ZK_HOSTS#*:}; do
+    # Get the first ZK host from the comma-separated list
+    FIRST_ZK_HOST=$(echo "${SOLR_ZK_HOSTS}" | cut -d'/' -f1 | cut -d',' -f1)
+    until nc -z ${FIRST_ZK_HOST%:*} ${FIRST_ZK_HOST#*:}; do
+      echo "Waiting for Zookeeper at ${FIRST_ZK_HOST}..."
       sleep 5
     done
     
