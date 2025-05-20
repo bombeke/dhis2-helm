@@ -183,7 +183,8 @@ solr:
         - name: configsets
           mountPath: /configsets
         - name: empty-dir
-          mountPath: /tmp/configsets
+          mountPath: /tmp
+          subPath: configsets
 
   extraVolumes:
     - name: init-script
@@ -203,7 +204,8 @@ solr:
     - name: configsets
       mountPath: /configsets
     - name: empty-dir
-      mountPath: /tmp/configsets
+      mountPath: /tmp
+      subPath: configsets
 
 clickhouse:
   enabled: true
