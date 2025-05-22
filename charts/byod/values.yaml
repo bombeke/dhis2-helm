@@ -168,9 +168,14 @@ mongodb:
 # Solr configuration
 solr:
   enabled: true
+  zookeeper-operator:
+    crd:
+      create: true
+  dataStorage:
+    type: persistent
   image:
     repository: talexie/coms_manager-solr
-    tag: 1.0.0
+    tag: 1.0.1
   auth:
     adminUsername: admin
     adminPassword: "password"

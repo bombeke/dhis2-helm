@@ -37,23 +37,19 @@ data:
       echo "Waiting for Zookeeper at {{ include "byod.fullname" . }}-zookeeper:2181 ..."
       sleep 5
     done 
-    ls -l /opt/bitnami/configsets
 
     echo "Uploading configset to ZooKeeper..."
-    /opt/bitnami/solr/bin/solr zk upconfig -n bombeke_dev \
-      -d /opt/bitnami/configsets \
+    solr zk upconfig -n bombeke_dev \
+      -d /opt/solr/server/solr/configsets/bombeke_dev \
       -z {{ include "byod.fullname" . }}-zookeeper:2181
 
  
 
     echo "Creating collection..."
-    curl "http://{{ include "byod.fullname" . }}-solr:8983/solr/admin/collections?action=CREATE&name=bombekecollection&numShards=1&replicationFactor=1&collection.configName=bombeke_dev" \
-      -u "{{ .Values.solr.auth.adminUsername }}:{{ .Values.solr.auth.adminPassword }}"
+    curl "http://{{ include "byod.fullname" . }}-solr:8983/solr/admin/collections?action=CREATE&name=bombekecollection&numShards=1&replicationFactor=1&collection.configName=bombeke_dev"
 
     echo "Building spellcheck dictionary..."
-    curl "http://{{ include "byod.fullname" . }}-solr:8983/solr/bombekecollection/spell?spellcheck.build=true" \
-      -u "{{ .Values.solr.auth.adminUsername }}:{{ .Values.solr.auth.adminPassword }}"
-
+    curl "http://{{ include "byod.fullname" . }}-solr:8983/solr/bombekecollection/spell?spellcheck.build=true"
 
 ---
 apiVersion: v1

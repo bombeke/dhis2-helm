@@ -14,15 +14,13 @@ spec:
     spec:
       restartPolicy: Never
       containers:
-      - name: solr-init-job
+      - name: {{ include "byod.fullname" . }}-solr-init-job
         image: talexie/coms_manager-solr
         command: ["/bin/bash", "/scripts/init-solr.sh"]
         volumeMounts:
         - name: init-script
           mountPath: /scripts
-        env:
-        - name: SOLR_OPTS
-          value: "-Dsolr.install.dir=/opt/bitnami/solr"
+          subPath: init-solr.sh
       volumes:
       - name: init-script
         configMap:
