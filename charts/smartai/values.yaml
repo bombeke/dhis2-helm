@@ -164,7 +164,7 @@ mongodb:
     rootPassword: "admin"
     enabled: true
 # Redis configuration
-redis:
-  enabled: false
+valkey:
+  enabled: true
   auth:
     enabled: false
