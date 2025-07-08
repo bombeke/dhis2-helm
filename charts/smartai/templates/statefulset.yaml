@@ -11,6 +11,7 @@ spec:
   selector:
     matchLabels:
       {{- include "smartai.selectorLabels" . | nindent 6 }}
+  serviceName: {{ include "smartai.fullname" . }}  # Required for StatefulSet
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -18,10 +19,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "smartai.labels" . | nindent 8 }}
-        {{- with .Values.podLabels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        {{- include "smartai.selectorLabels" . | nindent 8 }}  # Changed to selectorLabels for consistency
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -33,15 +31,15 @@ spec:
       initContainers:
         - name: smartai-home-permissions
           image: busybox
-          command: [ 'sh', '-c', 'chown {{ .Values.securityContext.runAsUser }}:{{ .Values.securityContext.runAsGroup }} {{ .Values.smartaiHome }} && chmod u+rw,go-rwx {{ .Values.smartaiHome }}' ]
+          command: ['sh', '-c', 'mkdir -p {{ .Values.smartaiHome }} && chown {{ .Values.securityContext.runAsUser }}:{{ .Values.securityContext.runAsGroup }} {{ .Values.smartaiHome }} && chmod 750 {{ .Values.smartaiHome }}']
           volumeMounts:
-            - name: {{ include "smartai.fullname" . }}
+            - name: data
               mountPath: {{ .Values.smartaiHome }}
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
@@ -57,40 +55,38 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          
           volumeMounts:
-            - name: {{ include "smartai.fullname" . }}
+            - name: data
               mountPath: {{ .Values.smartaiHome }}
-              readOnly: false
-            - name: config-ini
+            - name: config
               mountPath: /opt/smartai/config.ini
               subPath: config.ini
-            - name: cert-public-pem
+            - name: config
               mountPath: {{ .Values.smartaiHome }}/cert_public.pem
               subPath: cert_public.pem
-            - name: smartai-data
+            {{- if .Values.storage.persisted }}
+            - name: cache
               mountPath: /pip-cache
-            {{- with .Values.volumeMounts }}
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
               {{- toYaml . | nindent 12 }}
             {{- end }}
-      
       volumes:
-        - name: config-ini
+        - name: config
           configMap:
             name: {{ include "smartai.fullname" . }}
             items:
               - key: config.ini
                 path: config.ini
-        - name: cert-public-pem
-          configMap:
-            name: {{ include "smartai.fullname" . }}
-            items:
               - key: cert_public.pem
                 path: cert_public.pem
-        - name: smartai-data
-          persistentVolumeClaim:
-            claimName: {{ include "smartai.fullname" . }}
-        {{- with .Values.volumes }}
+        {{- if not .Values.storage.persisted }}
+        - name: data
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
       {{- with .Values.nodeSelector }}
@@ -108,13 +104,27 @@ spec:
   {{- if .Values.storage.persisted }}
   volumeClaimTemplates:
     - metadata:
-        name: {{ include "smartai.fullname" . }}
+        name: data
         labels:
           {{- include "smartai.labels" . | nindent 10 }}
       spec:
-        accessModes:
-          - ReadWriteOnce
+        accessModes: [ "ReadWriteOnce" ]
         resources:
           requests:
             storage: {{ .Values.storage.volumeSize }}
+        {{- if .Values.storage.storageClass }}
+        storageClassName: {{ .Values.storage.storageClass }}
+        {{- end }}
+    - metadata:
+        name: cache
+        labels:
+          {{- include "smartai.labels" . | nindent 10 }}
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: {{ .Values.storage.cacheVolumeSize | default "10Gi" }}
+        {{- if .Values.storage.storageClass }}
+        storageClassName: {{ .Values.storage.storageClass }}
+        {{- end }}
   {{- end }}

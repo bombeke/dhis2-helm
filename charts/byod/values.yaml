@@ -233,6 +233,7 @@ ollama:
     pull:
       - deepseek-r1:1.5b
       - qwen2.5-coder:3b
+      - hermes3:8b
   ingress:
     enabled: false
     hosts:
