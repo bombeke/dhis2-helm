@@ -156,6 +156,18 @@ middleware:
 # Add a list of allowed origins
 allowedOrigins: []
 
+
+env:
+  SOLR_URL: http://localhost:8081/solr
+  OLLAMA_BASE_URL: http://localhost:11434
+  DRUPAL_BASE_URL: http://localhost:8080
+  DRUPAL_USERNAME: admin
+  DRUPAL_PASSWORD: "strongestpassword"
+  CLICKHOUSE_HOST: "localhost"
+  CLICKHOUSE_PORT: 9000
+  CLICKHOUSE_DATABASE: "default"
+  CLICKHOUSE_USERNAME: "default"
+  CLICKHOUSE_PASSWORD: ""
 # MongoDB dependency configuration
 mongodb:
   enabled: true
@@ -168,3 +180,6 @@ valkey:
   enabled: true
   auth:
     enabled: false
+
+clickhouse:
+  enabled: true
