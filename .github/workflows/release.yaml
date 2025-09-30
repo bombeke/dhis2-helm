@@ -37,6 +37,7 @@ jobs:
           helm repo add opensearch https://opensearch-project.github.io/helm-charts
           helm repo add apache-solr https://solr.apache.org/charts
           helm repo add ollama-helm https://otwld.github.io/ollama-helm/
+          helm repo add valkey https://valkey.io/valkey-helm
           helm repo update
           helm dependency update charts/core
           helm dependency update charts/dashboard
