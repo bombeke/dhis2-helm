@@ -3,10 +3,10 @@ name: core
 description: DHIS 2 Helm Chart
 
 dependencies:
-  - name: redis
+  - name: valkey
     version: "~0"
     repository: "https://valkey.io/valkey-helm"
-    condition: redis.enabled
+    condition: valkey.enabled
     
   - name: postgresql
     version: "~12"

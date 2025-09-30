@@ -404,7 +404,7 @@ tolerations: []
 
 affinity: {}
 
-redis:
+valkey:
   enabled: false
   auth:
     enabled: false
@@ -507,4 +507,3 @@ casdoor-helm-charts:
         paths:
           - path: /
             pathType: ImplementationSpecific
-
