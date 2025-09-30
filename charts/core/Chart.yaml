@@ -5,7 +5,7 @@ description: DHIS 2 Helm Chart
 dependencies:
   - name: redis
     version: "~0"
-    repository: "https://valkey.io/valkey-helm
+    repository: "https://valkey.io/valkey-helm"
     condition: redis.enabled
     
   - name: postgresql
