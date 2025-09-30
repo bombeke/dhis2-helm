@@ -3,6 +3,29 @@ entries:
   byod:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2025-09-30T19:28:12.968265267Z"
+    dependencies:
+    - condition: mongodb.enabled
+      name: mongodb
+      repository: https://charts.bitnami.com/bitnami
+      version: ~16.4
+    - condition: ollama.enabled
+      name: ollama
+      repository: https://otwld.github.io/ollama-helm
+      version: ~1
+    - condition: clickhouse.enabled
+      name: clickhouse
+      repository: https://charts.bitnami.com/bitnami
+      version: ~9
+    description: A Bombeke Data Beyod Platform Helm chart for Kubernetes
+    digest: d14afbcaa6940d445e626b9662ac29cdf7e00690965a9c584cc74b1dceac7447
+    name: byod
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/byod-0.1.50/byod-0.1.50.tgz
+    version: 0.1.50
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2025-05-22T15:12:40.113389765Z"
     dependencies:
     - condition: mongodb.enabled
@@ -1279,6 +1302,33 @@ entries:
     - https://github.com/bombeke/dhis2-helm/releases/download/certmanager-0.1.0/certmanager-0.1.0.tgz
     version: 0.1.0
   core:
+  - apiVersion: v2
+    appVersion: 41.2.0
+    created: "2025-09-30T19:28:13.12269148Z"
+    dependencies:
+    - condition: valkey.enabled
+      name: valkey
+      repository: https://valkey.io/valkey-helm
+      version: ~0
+    - condition: postgresql.enabled
+      name: postgresql
+      repository: https://charts.bitnami.com/bitnami
+      version: ~12
+    - condition: mariadb.enabled
+      name: mariadb
+      repository: https://charts.bitnami.com/bitnami
+      version: ~19
+    - condition: casdoor-helm-charts.enabled
+      name: casdoor-helm-charts
+      repository: oci://registry-1.docker.io/casbin
+      version: v1.855.0
+    description: DHIS 2 Helm Chart
+    digest: 35de47d81c5c7ce788114c576b37c2e2ddfb720cc34db283bf91afb4d52bcd1e
+    name: core
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/core-1.0.47/core-1.0.47.tgz
+    version: 1.0.47
   - apiVersion: v2
     appVersion: 41.2.0
     created: "2025-05-22T15:12:40.460065238Z"
@@ -2778,6 +2828,29 @@ entries:
   smartai:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2025-09-30T19:28:13.643105607Z"
+    dependencies:
+    - condition: mongodb.enabled
+      name: mongodb
+      repository: https://charts.bitnami.com/bitnami
+      version: ~16.4
+    - condition: valkey.enabled
+      name: valkey
+      repository: https://valkey.io/valkey-helm
+      version: ~0
+    - condition: clickhouse.enabled
+      name: clickhouse
+      repository: https://charts.bitnami.com/bitnami
+      version: ~9
+    description: A Helm chart for Kubernetes
+    digest: f81355461a1167ac813b2ea4d52d92cfe346fab25128d61fcb28d9e73ea8af0d
+    name: smartai
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/smartai-0.1.16/smartai-0.1.16.tgz
+    version: 0.1.16
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2025-07-08T17:14:38.344074314Z"
     dependencies:
     - condition: mongodb.enabled
@@ -3118,4 +3191,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2025-07-08T17:14:38.344328933Z"
+generated: "2025-09-30T19:28:13.643883132Z"
