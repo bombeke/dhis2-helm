@@ -61,7 +61,7 @@ ingress:
   certIssuer: le-staging
   hostname: "drupal.default.svc.cluster.local"
   path: /
-  annotations: {}
+  annotations:
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
