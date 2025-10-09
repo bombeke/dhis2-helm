@@ -181,5 +181,82 @@ valkey:
   auth:
     enabled: false
 
-clickhouse:
+typesense-operator:
   enabled: true
+  
+hdx-oss-v2:
+  enabled: true
+  hyperdx:
+    #mongoUri: mongodb://{{ include "hdx-oss.fullname" . }}-mongodb:{{ .Values.mongodb.port }}/hyperdx
+    #frontendUrl: "{{ .Values.hyperdx.appUrl }}:{{ .Values.hyperdx.appPort }}"
+    #defaultConnections: |
+    #  [
+    #    {
+    #      "name": "External ClickHouse",
+    #      "host": "http://your-clickhouse-server:8123",
+    #      "port": 8123,
+    #      "username": "your-username",
+    #      "password": "your-password"
+    #    }
+    #  ]
+    ingress:
+      enabled: false
+      ingressClassName: "traefik" # or nginx
+      annotations:
+        # kubernetes.io/ingress.class: nginx
+        # kubernetes.io/tls-acme: "true"
+        cert-manager.io/cluster-issuer: le-staging
+        traefik.ingress.kubernetes.io/router.entrypoints: websecure
+      host: "localhost" 
+      tls:
+        enabled: false
+        secretName: "hyperdx-tls"
+    env:
+      - name: BETA_CH_OTEL_JSON_SCHEMA_ENABLED
+        value: "true"
+  otel:
+    port: 13133
+    nativePort: 24225
+    grpcPort: 4317
+    httpPort: 4318
+    healthPort: 8888
+    enabled: true
+    env:
+      - name: OTEL_AGENT_FEATURE_GATE_ARG
+        value: "--feature-gates=clickhouse.json"
+    # Opamp server URL - defaults to the app service. Customize if you want to use a different Opamp server.
+    # Leave empty if you want to use the app service.
+    # Example: opampServerUrl: "http://custom-opamp-server:4320"
+    opampServerUrl:
+    # Clickhouse endpoint - defaults to chart's Clickhouse service. Customize if you want to use a different Clickhouse service.
+    # Leave empty if you want to use the chart's Clickhouse service.
+    # Example: clickhouseEndpoint: "tcp://custom-clickhouse-service:9000"
+    clickhouseEndpoint:
+    clickhouseUser:
+    clickhousePassword:
+    # Clickhouse Prometheus endpoint - defaults to chart's Clickhouse prometheus service. Customize if you want to use a different Clickhouse prometheus service.
+    # Leave empty if prometheus is disabled.
+    # Example: clickhousePrometheusEndpoint: "http://custom-clickhouse-service:9363"
+    clickhousePrometheusEndpoint:
+    # Clickhouse database to send logs/traces/metrics to. Defaults to "default"
+    clickhouseDatabase: "default"
+  mongodb:
+    image: "mongo:5.0.14-focal"
+    port: 27017
+    enabled: false
+
+  clickhouse:
+    image: "clickhouse/clickhouse-server:24-alpine"
+    port: 8123
+    nativePort: 9000
+    enabled: true
+  tasks:
+    enabled: false
+    checkAlerts:
+      schedule: "*/1 * * * *"  # Runs every 1 minute
+      resources:
+        limits:
+          cpu: 200m
+          memory: 256Mi
+        requests:
+          cpu: 100m

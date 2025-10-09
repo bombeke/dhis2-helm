@@ -38,6 +38,9 @@ jobs:
           helm repo add apache-solr https://solr.apache.org/charts
           helm repo add ollama-helm https://otwld.github.io/ollama-helm/
           helm repo add valkey https://valkey.io/valkey-helm
+          helm repo add hyperdx https://hyperdxio.github.io/helm-charts
+          helm repo add typesense-operator https://akyriako.github.io/typesense-operator/
+          helm repo add stackgres-charts https://stackgres.io/downloads/stackgres-k8s/stackgres/helm/
           helm repo update
           helm dependency update charts/core
           helm dependency update charts/dashboard

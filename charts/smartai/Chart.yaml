@@ -15,7 +15,7 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.1.16
+version: 0.1.17
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
@@ -32,7 +32,11 @@ dependencies:
     version: "~0"
     repository: "https://valkey.io/valkey-helm"
     condition: valkey.enabled
-  - name: clickhouse
-    version: "~9"
-    repository: "https://charts.bitnami.com/bitnami"
-    condition: clickhouse.enabled
+  - name: hdx-oss-v2
+    version: "~0"
+    repository: "https://hyperdxio.github.io/helm-charts"
+    condition: hdx-oss-v2.enabled
+  - name: typesense-operator
+    version: "~0"
+    repository: "https://akyriako.github.io/typesense-operator"
+    condition: typesense-operator.enabled
