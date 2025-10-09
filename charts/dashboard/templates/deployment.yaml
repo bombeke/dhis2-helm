@@ -66,4 +66,4 @@ spec:
         - name: drupal-data
           emptyDir: {}
         {{- end }}
-  {{- end }}
+{{- end }}

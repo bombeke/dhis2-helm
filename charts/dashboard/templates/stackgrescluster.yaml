@@ -11,4 +11,4 @@ spec:
     persistentVolume: 
       size: '5Gi'
 
-{{ end }}
+{{- end }}
