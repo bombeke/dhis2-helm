@@ -2555,6 +2555,37 @@ entries:
   dashboard:
   - apiVersion: v2
     appVersion: 1.0.0
+    created: "2025-10-09T19:47:46.289178411Z"
+    dependencies:
+    - condition: superset.enabled
+      name: superset
+      repository: https://apache.github.io/superset
+      version: ~0
+    - condition: trino.enabled
+      name: trino
+      repository: https://trinodb.github.io/charts
+      version: ~0
+    - condition: kube-starrocks.enabled
+      name: kube-starrocks
+      repository: https://starrocks.github.io/starrocks-kubernetes-operator
+      version: ~1
+    - condition: stackgres-operator.enabled
+      name: stackgres-operator
+      repository: https://stackgres.io/downloads/stackgres-k8s/stackgres/helm/
+      version: ~1.17
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://charts.bitnami.com/bitnami
+      version: ~1
+    description: A Helm chart for Kubernetes
+    digest: ec0fd05d22ea300a5aba1df6bae9b144294fd1b4c99a70f387778614c5d6d2d8
+    name: dashboard
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/dashboard-0.1.5/dashboard-0.1.5.tgz
+    version: 0.1.5
+  - apiVersion: v2
+    appVersion: 1.0.0
     created: "2025-03-06T08:33:01.640555723Z"
     dependencies:
     - condition: superset.enabled
@@ -2826,6 +2857,33 @@ entries:
     - https://github.com/bombeke/dhis2-helm/releases/download/kafka-0.1.0/kafka-0.1.0.tgz
     version: 0.1.0
   smartai:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2025-10-09T19:47:46.63176621Z"
+    dependencies:
+    - condition: mongodb.enabled
+      name: mongodb
+      repository: https://charts.bitnami.com/bitnami
+      version: ~16.4
+    - condition: valkey.enabled
+      name: valkey
+      repository: https://valkey.io/valkey-helm
+      version: ~0
+    - condition: hdx-oss-v2.enabled
+      name: hdx-oss-v2
+      repository: https://hyperdxio.github.io/helm-charts
+      version: ~0
+    - condition: typesense-operator.enabled
+      name: typesense-operator
+      repository: https://akyriako.github.io/typesense-operator
+      version: ~0
+    description: A Helm chart for Kubernetes
+    digest: ad9ed2a26feb1e844e75883cf9aab25d14de4248a79b1b35823bbede72f12033
+    name: smartai
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/smartai-0.1.17/smartai-0.1.17.tgz
+    version: 0.1.17
   - apiVersion: v2
     appVersion: 1.16.0
     created: "2025-09-30T19:28:13.643105607Z"
@@ -3191,4 +3249,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2025-09-30T19:28:13.643883132Z"
+generated: "2025-10-09T19:47:46.632473224Z"
