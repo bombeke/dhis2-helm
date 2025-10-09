@@ -1,4 +1,4 @@
-{{- if .Values.stackgres-operator.enabled }}
+{{- if .Values.stackgresOperator.enabled }}
 apiVersion: stackgres.io/v1
 kind: SGCluster
 metadata:

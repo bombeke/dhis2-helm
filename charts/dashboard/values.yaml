@@ -136,7 +136,7 @@ extraMiddleware:
       accessControlAllowHeaders: 
         - "*"
 # StackGres Operator
-stackgres-operator:
+stackgresOperator:
   enabled: false
 
 # Apache Superset Chart configuration
