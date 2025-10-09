@@ -5,7 +5,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: {{ $fullName }}-drupal-pvc
   labels:
-    {{- include "drupal.labels" . | nindent 4 }}
+    {{- include "dashboard.labels" . | nindent 4 }}
   annotations:
     "helm.sh/resource-policy": keep
 spec:
