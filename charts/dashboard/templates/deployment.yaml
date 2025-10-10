@@ -1,6 +1,5 @@
-{{- if .Values.enabled }}
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "dashboard.fullname" . }}
   labels:
@@ -12,19 +11,43 @@ spec:
   selector:
     matchLabels:
       {{- include "dashboard.selectorLabels" . | nindent 6 }}
+  serviceName: {{ include "dashboard.fullname" . }}  # Required for StatefulSet
   template:
     metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       labels:
-        {{- include "dashboard.selectorLabels" . | nindent 8 }}
+        {{- include "dashboard.selectorLabels" . | nindent 8 }}  # Changed to selectorLabels for consistency
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "dashboard.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ include "dashboard.fullname" . }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: 80
+              containerPort: {{ .Values.service.port }}
               protocol: TCP
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
           env:
             - name: DRUPAL_DATABASE_HOST
               value: {{ .Values.drupal.DRUPAL_DATABASE_HOST | quote }}
@@ -49,14 +72,6 @@ spec:
             - name: drupal-data
               mountPath: {{ .Values.persistence.mountPath }}/themes
               subPath: themes
-          livenessProbe:
-            httpGet:
-              path: /user/login
-              port: http
-          readinessProbe:
-            httpGet:
-              path: /user/login
-              port: http
       volumes:
         {{- if .Values.persistence.enabled }}
         - name: drupal-data
@@ -66,4 +81,16 @@ spec:
         - name: drupal-data
           emptyDir: {}
         {{- end }}
-{{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
