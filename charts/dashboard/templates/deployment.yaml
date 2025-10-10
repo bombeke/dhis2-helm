@@ -12,6 +12,7 @@ spec:
   selector:
     matchLabels:
       {{- include "dashboard.selectorLabels" . | nindent 6 }}
+  serviceName: {{ include "dashboard.fullname" . }}
   template:
     metadata:
       labels:
@@ -51,11 +52,11 @@ spec:
               subPath: themes
           livenessProbe:
             httpGet:
-              path: /
+              path: /user/login
               port: http
           readinessProbe:
             httpGet:
-              path: /
+              path: /user/login
               port: http
       volumes:
         {{- if .Values.persistence.enabled }}
