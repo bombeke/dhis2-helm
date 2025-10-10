@@ -28,6 +28,22 @@ spec:
       serviceAccountName: {{ include "dashboard.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: web-home-permissions
+          image: busybox
+          command:
+            - /bin/sh
+          args:
+            - -c
+            - |
+              echo "Configuring folder settings"
+              chown www-data:www-data -R {{ .Values.persistence.mountPath }}
+              chmod u+rw,go-rwx {{ .Values.persistence.mountPath }}
+              echo "Finished setup"
+
+          volumeMounts:
+            - name: drupal-data
+              mountPath: {{ .Values.persistence.mountPath }}
       containers:
         - name: {{ .Chart.Name }}
           securityContext:

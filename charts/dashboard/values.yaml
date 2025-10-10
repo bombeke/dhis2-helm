@@ -103,7 +103,7 @@ drupal:
   # It's better to handle sensitive data like secrets via a separate 'secrets.yaml' or Kubernetes Secrets
   # kubectl create secret generic drupal-db-secret --from-literal=database-password='xxxxx'
 
-  DRUPAL_DATABASE_HOST: "superset-postgresql-0.default.svc.cluster.local"
+  DRUPAL_DATABASE_HOST: "superset1-postgresql-0.default.svc.cluster.local"
   DRUPAL_DATABASE_NAME: "drupal"
   DRUPAL_DATABASE_USER: "drupal"
 
