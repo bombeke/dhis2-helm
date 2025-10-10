@@ -130,7 +130,7 @@ tolerations: []
 
 affinity: {}
 
-extraMiddleware:
+extramiddleware:
   middleware:
     headers:
       accessControlAllowHeaders: 

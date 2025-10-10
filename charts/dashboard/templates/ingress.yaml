@@ -40,7 +40,7 @@ spec:
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: {{ include "dashboard.fullname" . }}-extraMiddleware-middleware
+  name: {{ include "dashboard.fullname" . }}-extramiddleware-middleware
   labels:
     {{- include "dashboard.labels" . | nindent 4 }}
 spec:
