@@ -45,6 +45,6 @@ metadata:
     {{- include "dashboard.labels" . | nindent 4 }}
 spec:
   headers:
-    {{- with .Values.extraMiddleware.middleware.headers }}
+    {{- with .Values.extramiddleware.middleware.headers }}
     {{- toYaml . | nindent 6 }}
     {{- end }}
