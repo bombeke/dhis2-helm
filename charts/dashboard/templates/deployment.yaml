@@ -29,7 +29,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       initContainers:
-        - name: web-home-permissions
+        - name: dashboard-home-permissions
           image: busybox
           command:
             - /bin/sh
@@ -37,6 +37,10 @@ spec:
             - -c
             - |
               echo "Configuring folder settings"
+              mkdir -p {{ .Values.persistence.mountPath }}/themes
+              mkdir -p {{ .Values.persistence.mountPath }}/sites
+              mkdir -p {{ .Values.persistence.mountPath }}/modules
+              mkdir -p {{ .Values.persistence.mountPath }}/profiles
               chown www-data:www-data -R {{ .Values.persistence.mountPath }}
               chmod u+rw,go-rwx {{ .Values.persistence.mountPath }}
               echo "Finished setup"
@@ -78,8 +82,6 @@ spec:
                   key: database-password
           volumeMounts:
             - name: drupal-data
-              mountPath: {{ .Values.persistence.mountPath }}
-            - name: drupal-data
               mountPath: {{ .Values.persistence.mountPath }}/sites
               subPath: sites
             - name: drupal-data
@@ -88,6 +90,9 @@ spec:
             - name: drupal-data
               mountPath: {{ .Values.persistence.mountPath }}/themes
               subPath: themes
+            - name: drupal-data
+              mountPath: {{ .Values.persistence.mountPath }}/profiles
+              subPath: profiles
       volumes:
         {{- if .Values.persistence.enabled }}
         - name: drupal-data
