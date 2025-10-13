@@ -57,34 +57,58 @@ spec:
             - -c
             - |
               cat > /etc/apache2/sites-enabled/000-default.conf <<EOF
-              <VirtualHost *:80>
-                  #ServerName localhost
-                  DocumentRoot /var/www/html
+                <VirtualHost *:80>
+                    DocumentRoot /var/www/html
 
-                  <Directory /var/www/html>
-                      Options Indexes FollowSymLinks
-                      AllowOverride All
-                      Require all granted
-                  </Directory>
-                  Header always set Access-Control-Allow-Origin "*"
-                  Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS, HEAD"
-                  Header always set Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+                    LoadModule headers_module /usr/lib/apache2/modules/mod_headers.so
+                    LoadModule rewrite_module /usr/lib/apache2/modules/mod_rewrite.so
+                    LoadModule alias_module /usr/lib/apache2/modules/mod_alias.so
 
-                  RewriteEngine On
-                  RewriteCond %{REQUEST_METHOD} OPTIONS
-                  RewriteRule ^(.*)$ $1 [R=200,L]
+                    <Directory /var/www/html>
+                        Options Indexes FollowSymLinks
+                        AllowOverride All
+                        Require all granted
+                    </Directory>
 
-                  Alias /sites/default/files /var/www/html/sites/default/files
-                  <Directory /var/www/html/sites/default/files>
-                      Require all granted
-                      <IfModule mod_headers.c>
-                          Header always set Access-Control-Allow-Origin "*"
-                      </IfModule>
-                  </Directory>
+                    <IfModule mod_headers.c>
+                        Header always set Access-Control-Allow-Origin "*"
+                        Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS, HEAD"
+                        Header always set Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+                    </IfModule>
+                    <IfModule mod_rewrite.c>
+                        RewriteEngine On
+                        RewriteCond %{REQUEST_METHOD} OPTIONS
+                        RewriteRule ^(.*)$ $1 [R=200,L]
+                    </IfModule>
 
-                  ErrorLog \${APACHE_LOG_DIR}/error.log
-                  CustomLog \${APACHE_LOG_DIR}/access.log combined
-              </VirtualHost>
+                    Alias /sites/default/files /var/www/html/sites/default/files
+                    <Directory "/var/www/html/sites/default/files">
+                        Options Indexes FollowSymLinks
+                        AllowOverride None
+                        Require all granted
+
+                        <IfModule mod_headers.c>
+                            Header always set Access-Control-Allow-Origin "*"
+                            Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+                            Header always set Access-Control-Allow-Headers "Range, Origin, Accept"
+                            Header always set Access-Control-Expose-Headers "Accept-Ranges, Content-Range, Content-Length"
+                            
+                            Header always set Accept-Ranges "bytes"
+                        </IfModule>
+                        
+                    </Directory>
+
+                    <IfModule mod_headers.c>
+                        Header always set X-Content-Type-Options "nosniff"
+                        Header always set X-Frame-Options "SAMEORIGIN"
+                        Header always set X-XSS-Protection "1; mode=block"
+                    </IfModule>
+
+                    ErrorLog \${APACHE_LOG_DIR}/error.log
+                    CustomLog \${APACHE_LOG_DIR}/access.log combined
+                    
+                    LogLevel warn
+                </VirtualHost>
               EOF
           securityContext:
             runAsUser: 0
