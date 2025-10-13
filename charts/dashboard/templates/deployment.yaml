@@ -94,6 +94,7 @@ spec:
                             Header always set Access-Control-Expose-Headers "Accept-Ranges, Content-Range, Content-Length"
                             
                             Header always set Accept-Ranges "bytes"
+                            Header always set Content-Security-Policy "upgrade-insecure-requests"
                         </IfModule>
                         
                     </Directory>
@@ -102,6 +103,7 @@ spec:
                         Header always set X-Content-Type-Options "nosniff"
                         Header always set X-Frame-Options "SAMEORIGIN"
                         Header always set X-XSS-Protection "1; mode=block"
+                        Header always set Content-Security-Policy "upgrade-insecure-requests"
                     </IfModule>
 
                     ErrorLog \${APACHE_LOG_DIR}/error.log
