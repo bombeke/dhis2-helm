@@ -175,3 +175,8 @@ Our release workflow will then using [Helm chart releaser action](https://github
 
 Note: there might be a slight delay between the release and the `index.yaml`
 file being updated as GitHub pages have to be re-deployed.
+
+
+
+### Drupal
+$settings['trusted_host_patterns'] = array('^.*$');

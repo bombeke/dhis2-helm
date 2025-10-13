@@ -48,6 +48,46 @@ spec:
           volumeMounts:
             - name: drupal-data
               mountPath: {{ .Values.persistence.mountPath }}
+        - name: create-default-site
+          image: busybox
+          command: ['sh', '-c', 'cat > /etc/apache2/sites-enabled/000-default.conf <<EOF
+            <VirtualHost *:80>
+                #ServerName localhost
+                DocumentRoot /var/www/html
+
+                <Directory /var/www/html>
+                    Options Indexes FollowSymLinks
+                    AllowOverride All
+                    Require all granted
+                </Directory>
+                Header always set Access-Control-Allow-Origin "*"
+                Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS, HEAD"
+                Header always set Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+
+                # Handle CORS preflight requests
+                RewriteEngine On
+                RewriteCond %{REQUEST_METHOD} OPTIONS
+                RewriteRule ^(.*)$ $1 [R=200,L]
+
+                # Alias for Drupal files directory to address mixed content
+                Alias /sites/default/files /var/www/html/sites/default/files
+                <Directory /var/www/html/sites/default/files>
+                    Require all granted
+                    # Additional CORS settings for static assets
+                    <IfModule mod_headers.c>
+                        Header always set Access-Control-Allow-Origin "*"
+                    </IfModule>
+                </Directory>
+
+                ErrorLog ${APACHE_LOG_DIR}/error.log
+                CustomLog ${APACHE_LOG_DIR}/access.log combined
+            </VirtualHost>
+            EOF'
+            ]
+            volumeMounts:
+            - name: drupal-config
+              mountPath: /etc/apache2/sites-enabled
+
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
@@ -93,13 +133,21 @@ spec:
             - name: drupal-data
               mountPath: {{ .Values.persistence.mountPath }}/profiles
               subPath: profiles
+            - name: drupal-config
+              mountPath: /etc/apache2/sites-enabled
+              
       volumes:
         {{- if .Values.persistence.enabled }}
         - name: drupal-data
           persistentVolumeClaim:
             claimName: {{ include "dashboard.fullname" . }}-drupal-pvc
+        - name: drupal-config
+          persistentVolumeClaim:
+            claimName: {{ include "dashboard.fullname" . }}-drupal-config-pvc
         {{- else }}
         - name: drupal-data
+          emptyDir: {}
+        - name: drupal-config
           emptyDir: {}
         {{- end }}
 
