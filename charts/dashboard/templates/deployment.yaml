@@ -54,7 +54,7 @@ spec:
           command:
             - /bin/sh
           args:
-            - -c,
+            - -c
             - |
               cat > /etc/apache2/sites-enabled/000-default.conf <<EOF
               <VirtualHost *:80>
