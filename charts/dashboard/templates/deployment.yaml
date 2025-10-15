@@ -49,34 +49,7 @@ spec:
           volumeMounts:
             - name: drupal-data
               mountPath: {{ .Values.persistence.mountPath }}
-        - name: create-default-site
-          image: busybox
-          command:
-            - /bin/sh
-          args:
-            - -c
-            - |
-              cat > /etc/apache2/sites-enabled/000-default.conf <<EOF
-                <VirtualHost *:80>
-                    DocumentRoot /var/www/html
 
-                    <Directory /var/www/html>
-                        Options Indexes FollowSymLinks
-                        AllowOverride All
-                        Require all granted
-                    </Directory>
-
-                    ErrorLog \${APACHE_LOG_DIR}/error.log
-                    CustomLog \${APACHE_LOG_DIR}/access.log combined
-                    
-                    LogLevel warn
-                </VirtualHost>
-              EOF
-          securityContext:
-            runAsUser: 0
-          volumeMounts:
-            - name: drupal-config
-              mountPath: /etc/apache2/sites-enabled
 
       containers:
         - name: {{ .Chart.Name }}

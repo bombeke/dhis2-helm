@@ -15,6 +15,7 @@ metadata:
   {{- if $tls }}
     cert-manager.io/cluster-issuer: {{ .Values.ingress.certIssuer | quote }}
     ingress.kubernetes.io/ssl-redirect: "true"
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-{{include "dashboard.fullname" . }}-extramiddleware-middleware@kubernetescrd
   {{- end }}
 spec:
   {{- if $tls }}
@@ -28,7 +29,7 @@ spec:
       http:
         paths:
           - path: {{ .Values.ingress.path }}
-            pathType: Prefix
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: {{ $fullName }}
@@ -44,6 +45,7 @@ metadata:
   labels:
     {{- include "dashboard.labels" . | nindent 4 }}
 spec:
+  {{- with .Values.extramiddleware.middleware.redirectScheme }}
   headers:
     {{- with .Values.extramiddleware.middleware.headers }}
     {{- toYaml . | nindent 6 }}
