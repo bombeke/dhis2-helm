@@ -48,7 +48,101 @@ spec:
             runAsUser: 0
           volumeMounts:
             - name: drupal-data
-              mountPath: {{ .Values.persistence.mountPath }}
+              mountPath: {{ .Values.persistence.mountPath }}git
+        - name: create-default-site
+          image: busybox
+          command:
+            - /bin/sh
+          args:
+            - -c
+            - |
+              cat > /etc/apache2/sites-enabled/000-default.conf <<EOF
+                SetEnvIf X-Forwarded-Proto https HTTPS=on
+                <VirtualHost *:80>
+                    DocumentRoot /var/www/html
+
+                    LoadModule headers_module /usr/lib/apache2/modules/mod_headers.so
+                    LoadModule rewrite_module /usr/lib/apache2/modules/mod_rewrite.so
+                    LoadModule alias_module /usr/lib/apache2/modules/mod_alias.so
+
+                    <Directory /var/www/html>
+                        Options Indexes FollowSymLinks
+                        AllowOverride All
+                        Require all granted
+                        <IfModule mod_headers.c>
+                            Header always set Access-Control-Allow-Origin "*"
+                            Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+                            Header always set Access-Control-Allow-Headers "Range, Origin, Accept"
+                            Header always set Access-Control-Expose-Headers "Accept-Ranges, Content-Range, Content-Length"
+                            
+                            Header always set Accept-Ranges "bytes"
+                            Header always set Content-Security-Policy "upgrade-insecure-requests"
+                        </IfModule>
+                    </Directory>
+
+                    <IfModule mod_headers.c>
+                        Header always set Access-Control-Allow-Origin "*"
+                        Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS, HEAD"
+                        Header always set Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+                    </IfModule>
+                    <IfModule !mod_rewrite.c>
+                      FallbackResource /index.php
+                    </IfModule>
+                    <IfModule mod_rewrite.c>
+                        RewriteEngine On
+                        RewriteBase /
+
+                        # Set "protossl" to "s" if we were accessed via https://.  This is used later
+                        # if you enable "www." stripping or enforcement, in order to ensure that
+                        # you don't bounce between http and https.
+                        RewriteRule ^ - [E=protossl]
+                        RewriteCond %{HTTPS} on
+                        RewriteRule ^ - [E=protossl:s]
+
+                        # Make sure Authorization HTTP header is available to PHP
+                        # even when running as CGI or FastCGI.
+                        RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+                        RewriteCond %{REQUEST_METHOD} OPTIONS
+                        RewriteRule ^(.*)$ $1 [R=200,L]
+                    </IfModule>
+
+                    Alias /sites/default/files /var/www/html/sites/default/files
+                    <Directory "/var/www/html/web/sites/default/files">
+                        Options Indexes FollowSymLinks
+                        AllowOverride All
+                        Require all granted
+
+                        <IfModule mod_headers.c>
+                            Header always set Access-Control-Allow-Origin "*"
+                            Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+                            Header always set Access-Control-Allow-Headers "Range, Origin, Accept"
+                            Header always set Access-Control-Expose-Headers "Accept-Ranges, Content-Range, Content-Length"
+                            
+                            Header always set Accept-Ranges "bytes"
+                            Header always set Content-Security-Policy "upgrade-insecure-requests"
+                        </IfModule>
+                        
+                    </Directory>
+
+                    <IfModule mod_headers.c>
+                        Header always set X-Content-Type-Options "nosniff"
+                        Header always set X-Frame-Options "SAMEORIGIN"
+                        Header always set X-XSS-Protection "1; mode=block"
+                        Header always set Content-Security-Policy "upgrade-insecure-requests"
+                    </IfModule>
+
+                    ErrorLog \${APACHE_LOG_DIR}/error.log
+                    CustomLog \${APACHE_LOG_DIR}/access.log combined
+                    
+                    LogLevel warn
+                </VirtualHost>
+              EOF
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: drupal-config
+              mountPath: /etc/apache2/sites-enabled
 
       containers:
         - name: {{ .Chart.Name }}
