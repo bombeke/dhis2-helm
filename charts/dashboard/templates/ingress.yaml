@@ -45,7 +45,6 @@ metadata:
   labels:
     {{- include "dashboard.labels" . | nindent 4 }}
 spec:
-  {{- with .Values.extramiddleware.middleware.redirectScheme }}
   headers:
     {{- with .Values.extramiddleware.middleware.headers }}
     {{- toYaml . | nindent 6 }}
