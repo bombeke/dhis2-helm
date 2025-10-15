@@ -50,7 +50,6 @@ spec:
             - name: drupal-data
               mountPath: {{ .Values.persistence.mountPath }}
 
-
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
