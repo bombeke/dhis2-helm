@@ -65,9 +65,18 @@ spec:
                     LoadModule alias_module /usr/lib/apache2/modules/mod_alias.so
 
                     <Directory /var/www/html>
-                        Options Indexes FollowSymLinks
+                        Options Indexes FollowSymLinks -MultiViews
                         AllowOverride All
                         Require all granted
+                        <IfModule mod_headers.c>
+                            Header always set Access-Control-Allow-Origin "*"
+                            Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+                            Header always set Access-Control-Allow-Headers "Range, Origin, Accept"
+                            Header always set Access-Control-Expose-Headers "Accept-Ranges, Content-Range, Content-Length"
+                            
+                            Header always set Accept-Ranges "bytes"
+                            Header always set Content-Security-Policy "upgrade-insecure-requests"
+                        </IfModule>
                     </Directory>
 
                     <IfModule mod_headers.c>
@@ -82,9 +91,9 @@ spec:
                     </IfModule>
 
                     Alias /sites/default/files /var/www/html/sites/default/files
-                    <Directory "/var/www/html/sites/default/files">
-                        Options Indexes FollowSymLinks
-                        AllowOverride None
+                    <Directory "/var/www/html/web/sites/default/files">
+                        Options Indexes FollowSymLinks -MultiViews
+                        AllowOverride All
                         Require all granted
 
                         <IfModule mod_headers.c>
