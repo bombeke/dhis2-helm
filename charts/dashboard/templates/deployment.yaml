@@ -57,6 +57,7 @@ spec:
             - -c
             - |
               cat > /etc/apache2/sites-enabled/000-default.conf <<EOF
+                SetEnvIf X-Forwarded-Proto https HTTPS=on
                 <VirtualHost *:80>
                     DocumentRoot /var/www/html
 
@@ -65,7 +66,7 @@ spec:
                     LoadModule alias_module /usr/lib/apache2/modules/mod_alias.so
 
                     <Directory /var/www/html>
-                        Options Indexes FollowSymLinks -MultiViews
+                        Options Indexes FollowSymLinks
                         AllowOverride All
                         Require all granted
                         <IfModule mod_headers.c>
@@ -92,7 +93,7 @@ spec:
 
                     Alias /sites/default/files /var/www/html/sites/default/files
                     <Directory "/var/www/html/web/sites/default/files">
-                        Options Indexes FollowSymLinks -MultiViews
+                        Options Indexes FollowSymLinks
                         AllowOverride All
                         Require all granted
 
