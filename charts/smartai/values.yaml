@@ -14,7 +14,7 @@ image:
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "1.0.9"
+  tag: "1.0.57"
 
 # This is for the secretes for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -168,12 +168,23 @@ env:
   CLICKHOUSE_DATABASE: "default"
   CLICKHOUSE_USERNAME: "default"
   CLICKHOUSE_PASSWORD: ""
+
 # MongoDB dependency configuration
-mongodb:
+psmdb-db:
   enabled: true
+  replsets:
+    rs0:
+      size: 3
+      resources:
+        limits:
+          cpu: "1"
+          memory: "1Gi"
+  secrets:
+    users: true
+  tls:
+    enabled: true
+    mode: preferTLS
   auth:
-    rootUser: admin
-    rootPassword: "admin"
     enabled: true
 # Redis configuration
 valkey:
@@ -184,7 +195,7 @@ valkey:
 typesense-operator:
   enabled: true
   
-hdx-oss-v2:
+clickstack:
   enabled: true
   hyperdx:
     #mongoUri: mongodb://{{ include "hdx-oss.fullname" . }}-mongodb:{{ .Values.mongodb.port }}/hyperdx

@@ -41,6 +41,7 @@ jobs:
           helm repo add hyperdx https://hyperdxio.github.io/helm-charts
           helm repo add typesense-operator https://akyriako.github.io/typesense-operator/
           helm repo add stackgres-charts https://stackgres.io/downloads/stackgres-k8s/stackgres/helm/
+          helm repo add percona https://percona.github.io/percona-helm-charts/
           helm repo update
           helm dependency update charts/core
           helm dependency update charts/dashboard

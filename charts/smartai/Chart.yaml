@@ -15,7 +15,7 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.1.17
+version: 0.1.18
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
@@ -24,18 +24,18 @@ version: 0.1.17
 appVersion: "1.16.0"
 
 dependencies:
-  - name: mongodb
-    version: "~16.4"
-    repository: "https://charts.bitnami.com/bitnami"
-    condition: mongodb.enabled
+  - name: psmdb-db
+    version: "~1"
+    repository: "https://percona.github.io/percona-helm-charts/"
+    condition: psmdb-db.enabled
   - name: valkey
     version: "~0"
     repository: "https://valkey.io/valkey-helm"
     condition: valkey.enabled
-  - name: hdx-oss-v2
+  - name: clickstack
     version: "~0"
     repository: "https://hyperdxio.github.io/helm-charts"
-    condition: hdx-oss-v2.enabled
+    condition: clickstack.enabled
   - name: typesense-operator
     version: "~0"
     repository: "https://akyriako.github.io/typesense-operator"
