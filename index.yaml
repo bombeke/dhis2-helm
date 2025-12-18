@@ -3756,6 +3756,33 @@ entries:
   smartai:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2025-12-18T21:29:06.842828988Z"
+    dependencies:
+    - condition: psmdb-db.enabled
+      name: psmdb-db
+      repository: https://percona.github.io/percona-helm-charts/
+      version: ~1
+    - condition: valkey.enabled
+      name: valkey
+      repository: https://valkey.io/valkey-helm
+      version: ~0
+    - condition: clickstack.enabled
+      name: clickstack
+      repository: https://hyperdxio.github.io/helm-charts
+      version: ~1
+    - condition: typesense-operator.enabled
+      name: typesense-operator
+      repository: https://akyriako.github.io/typesense-operator
+      version: ~0
+    description: A Helm chart for Kubernetes
+    digest: a15c04c464a80159d023de80f4c7242d9601fb82573e3e091f4f43c2eb04ce98
+    name: smartai
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/smartai-0.1.18/smartai-0.1.18.tgz
+    version: 0.1.18
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2025-10-09T19:47:46.63176621Z"
     dependencies:
     - condition: mongodb.enabled
@@ -4146,4 +4173,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2025-10-15T13:45:08.330978728Z"
+generated: "2025-12-18T21:29:06.843155137Z"
