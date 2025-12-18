@@ -33,7 +33,7 @@ dependencies:
     repository: "https://valkey.io/valkey-helm"
     condition: valkey.enabled
   - name: clickstack
-    version: "~0"
+    version: "~1"
     repository: "https://hyperdxio.github.io/helm-charts"
     condition: clickstack.enabled
   - name: typesense-operator
