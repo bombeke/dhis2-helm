@@ -1303,6 +1303,33 @@ entries:
     version: 0.1.0
   core:
   - apiVersion: v2
+    appVersion: 42.3.1
+    created: "2026-03-30T11:13:56.310086346Z"
+    dependencies:
+    - condition: valkey.enabled
+      name: valkey
+      repository: https://valkey.io/valkey-helm
+      version: ~0
+    - condition: stackgres-operator.enabled
+      name: stackgres-operator
+      repository: https://stackgres.io/downloads/stackgres-k8s/stackgres/helm
+      version: ~1.17
+    - condition: mariadb.enabled
+      name: mariadb
+      repository: https://charts.bitnami.com/bitnami
+      version: ~19
+    - condition: casdoor-helm-charts.enabled
+      name: casdoor-helm-charts
+      repository: oci://registry-1.docker.io/casbin
+      version: v1.855.0
+    description: DHIS 2 Helm Chart
+    digest: 3c24413c3ab89aa681192414ec5b174c4851764c73901e9ca17ebd91a2a82f29
+    name: core
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/core-1.0.48/core-1.0.48.tgz
+    version: 1.0.48
+  - apiVersion: v2
     appVersion: 41.2.0
     created: "2025-09-30T19:28:13.12269148Z"
     dependencies:
@@ -2555,6 +2582,37 @@ entries:
   dashboard:
   - apiVersion: v2
     appVersion: 1.0.0
+    created: "2026-03-30T11:13:56.516100514Z"
+    dependencies:
+    - condition: superset.enabled
+      name: superset
+      repository: https://apache.github.io/superset
+      version: ~0
+    - condition: trino.enabled
+      name: trino
+      repository: https://trinodb.github.io/charts
+      version: ~0
+    - condition: kube-starrocks.enabled
+      name: kube-starrocks
+      repository: https://starrocks.github.io/starrocks-kubernetes-operator
+      version: ~1
+    - condition: stackgres-operator.enabled
+      name: stackgres-operator
+      repository: https://stackgres.io/downloads/stackgres-k8s/stackgres/helm
+      version: ~1.17
+    - condition: valkey.enabled
+      name: valkey
+      repository: https://valkey.io/valkey-helm
+      version: ~0
+    description: A Helm chart for Kubernetes
+    digest: e7e3bd8f4d552e16fbc05831bd88b12bce3874728b3e55a8f9d54cf119ea0d33
+    name: dashboard
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/dashboard-0.1.38/dashboard-0.1.38.tgz
+    version: 0.1.38
+  - apiVersion: v2
+    appVersion: 1.0.0
     created: "2025-10-15T13:45:07.780322794Z"
     dependencies:
     - condition: superset.enabled
@@ -3755,6 +3813,33 @@ entries:
     version: 0.1.0
   smartai:
   - apiVersion: v2
+    appVersion: 1.17.0
+    created: "2026-03-30T11:13:56.851473156Z"
+    dependencies:
+    - condition: psmdb-db.enabled
+      name: psmdb-db
+      repository: https://percona.github.io/percona-helm-charts/
+      version: ~1
+    - condition: valkey.enabled
+      name: valkey
+      repository: https://valkey.io/valkey-helm
+      version: ~0
+    - condition: clickstack.enabled
+      name: clickstack
+      repository: https://hyperdxio.github.io/helm-charts
+      version: ~1
+    - condition: typesense-operator.enabled
+      name: typesense-operator
+      repository: https://akyriako.github.io/typesense-operator
+      version: ~0
+    description: A Helm chart for Kubernetes
+    digest: 343ad38639be930c68d0538bed857497b0c18fd2626c9cec572acafd7d4683ec
+    name: smartai
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/smartai-0.1.19/smartai-0.1.19.tgz
+    version: 0.1.19
+  - apiVersion: v2
     appVersion: 1.16.0
     created: "2025-12-18T21:29:06.842828988Z"
     dependencies:
@@ -4173,4 +4258,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2025-12-18T21:29:06.843155137Z"
+generated: "2026-03-30T11:13:56.852151547Z"
