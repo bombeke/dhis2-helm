@@ -6,7 +6,7 @@ metadata:
 spec:
   instances: 1
   postgres:
-    version: {{- .Values.stackgresOperator.version }}
+    version: "17"
     extensions:
     - name: postgis
     - name: timescaledb
@@ -24,7 +24,7 @@ kind: SGPostgresConfig
 metadata:
   name: {{ include "dashboard.fullname" . }}-config-stackgres-simple
 spec:
-  postgresVersion: {{- .Values.stackgresOperator.version }}
+  postgresVersion: "17"
   postgresql.conf:
     shared_buffers: '256MB'
     #random_page_cost: '1.5'
