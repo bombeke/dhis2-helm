@@ -14,7 +14,7 @@ image:
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "1.0.57"
+  tag: "1.0.90"
 
 # This is for the secretes for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -177,15 +177,44 @@ psmdb-db:
       size: 3
       resources:
         limits:
-          cpu: "1"
+          cpu: "300m"
           memory: "1Gi"
+        requests:
+          cpu: "100m"
+          memory: "1Gi"
+  sharding:
+    enabled: true
+    balancer:
+      enabled: true
+
+    configrs:
+      size: 3 # from 3
+    mongos:
+      size: 3 # from 3
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: "600m"
+          memory: "1Gi"
+        requests:
+          cpu: "300m"
+          memory: "1Gi"
+
+  logcollector:
+    enabled: true
+
+  backup:
+    enabled: true
+
   secrets:
-    users: true
+    users: "true"
   tls:
     enabled: true
     mode: preferTLS
   auth:
     enabled: true
+
 # Redis configuration
 valkey:
   enabled: true
@@ -252,7 +281,8 @@ clickstack:
     # Clickhouse database to send logs/traces/metrics to. Defaults to "default"
     clickhouseDatabase: "default"
   mongodb:
-    image: "mongo:5.0.14-focal"
+    #image: "mongo:5.0.14-focal"
+    image: "mongo:8.0.17-noble"
     port: 27017
     enabled: false
 

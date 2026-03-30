@@ -6,9 +6,29 @@ metadata:
 spec:
   instances: 1
   postgres:
-    version: '17'
+    version: {{- .Values.stackgresOperator.version }}
+    extensions:
+    - name: postgis
+    - name: timescaledb
   pods:
     persistentVolume: 
       size: '5Gi'
+
+{{- end }}
+
+
+---
+{{- if .Values.stackgresOperator.enabled }}
+apiVersion: stackgres.io/v1
+kind: SGPostgresConfig
+metadata:
+  name: {{ include "dashboard.fullname" . }}-config-stackgres-simple
+spec:
+  postgresVersion: {{- .Values.stackgresOperator.version }}
+  postgresql.conf:
+    shared_buffers: '256MB'
+    #random_page_cost: '1.5'
+    #password_encryption: 'scram-sha-256'
+    #log_checkpoints: 'on'
 
 {{- end }}

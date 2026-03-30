@@ -309,16 +309,16 @@ javaOpts: ""
 
 minReadySeconds: 120
 startupProbe: # 2min10s (26 * 5 = 130s)
-  enabled: true
+  enabled: false
   failureThreshold: 26
   periodSeconds: 5
   path: /
 livenessProbe:
-  enabled: true
+  enabled: false
   timeoutSeconds: 1
   path: /
 readinessProbe:
-  enabled: true
+  enabled: false
   path: /
 
 replicaCount: 1
@@ -333,7 +333,7 @@ image:
   repository: talexie/dhis2
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: 41.2.0-jdk17-t9
+  tag: 42.3.1-jdk17-t9
 
 imagePullSecrets: []
 nameOverride: ""
@@ -409,6 +409,10 @@ valkey:
   auth:
     enabled: false
 
+# StackGres Operator
+stackgresOperator:
+  enabled: false
+  
 postgresql:
   enabled: true
   debug: false

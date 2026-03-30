@@ -1,0 +1,14 @@
+{{- if .Values.stackgresOperator.enabled }}
+apiVersion: stackgres.io/v1
+kind: SGCluster
+metadata:
+  name: {{ include "dashboard.fullname" . }}-stackgres-simple
+spec:
+  instances: 1
+  postgres:
+    version: '17'
+  pods:
+    persistentVolume: 
+      size: '20Gi'
+
+{{- end }}

@@ -42,7 +42,12 @@ helm repo add dhis2 https://bombeke.github.io/dhis2-helm
 helm repo update
 helm search repo dhis2/core --versions
 ```
+## Installing MongoDB
+```sh
+helm install psmdb-operator-crds percona/psmdb-operator-crds --namespace psmdb --create-namespace
+helm install smart dhis2/smartai -n smart --create-namespace -f values.yaml
 
+```
 ## Installing SmartAI 
 [DHIS2 smartai helm chart](./charts/smartai) is published to
 https://bombeke.github.io/dhis2-helm

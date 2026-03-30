@@ -139,33 +139,21 @@ extramiddleware:
         - "*"
 # StackGres Operator
 stackgresOperator:
-  enabled: false
+  enabled: true
+  version: "17"
 
+# Custom Cache Valkey
+valkey:
+  enabled: true
+  auth:
+    enabled: false
 # Apache Superset Chart configuration
 superset:
   enabled: true
-  image:
-    repository: talexie/superset
-    tag: 4.1.1-6
+  redis:
+    enabled: false
   postgresql:
-    enabled: true
-    debug: true
-    auth:
-      database: superset
-      password: superset
-      username: superset
-      postgresPassword: superset
-    #image:
-    #  registry: docker.io
-    #  repository: bitnami/postgresql
-    #  tag: 17.4.0-debian-12-r2
-    passwordUpdateJob:
-      enabled: true
-    primary:
-      pgHbaConfiguration: |-
-        local all all trust
-        host all all localhost trust
-        host all all 0.0.0.0/0 md5  
+    enabled: false
   ingress:
     enabled: true
     ingressClassName: ~
@@ -209,8 +197,11 @@ superset:
         "ENABLE_TEMPLATE_PROCESSING": True,
         "ALERT_REPORTS": True,
         "ENABLE_ADVANCED_DATA_TYPES": True,
-        "DASHBOARD_NATIVE_FILTERS": True
+        "DASHBOARD_NATIVE_FILTERS": True,
+        "ENABLE_SUPERSET_META_DB": True,
+        "DYNAMIC_PLUGINS": True
       }
+      ENABLE_PROXY_FIX = True
       ALERT_REPORTS_NOTIFICATION_DRY_RUN = True
       APP_NAME = "Bombeke Beyond Data Platform"
       CACHE_CONFIG = {
@@ -222,16 +213,29 @@ superset:
 
       SQLLAB_QUERY_CACHE_TIMEOUT = 300  # Query cache timeout
       CACHE_DEFAULT_TIMEOUT = 300  
-      
-
-
-  #supersetNode:
-  #  connections:
-  #    db_host: '{{ .Release.Name }}-postgresql'
-  #    db_port: "5432"
-  #    db_user: superset
-  #    db_pass: superset
-  #    db_name: superset
+     
+  supersetNode:
+    connections:
+      # Redis must be set redis.enabled:false
+      redis_host: "smartai-valkey-primary.smartai.svc.cluster.local"
+      redis_port: "6379"
+      redis_user: ""
+      # redis_password: superset
+      redis_cache_db: "1"
+      redis_celery_db: "0"
+      # Or SSL port is usually 6380
+      # Update following for using Redis with SSL
+      redis_ssl:
+        enabled: false
+        ssl_cert_reqs: CERT_NONE
+      # PostgreSQL must be set postgresql.enabled:false
+      # -- Database type for Superset metadata (Supported types: "postgresql", "mysql")
+      db_type: "postgresql"
+      db_host: "smartai-stackgres.smartai.svc.cluster.local"
+      db_port: "5432"
+      db_user: superset
+      db_pass: superset
+      db_name: superset
   #configOverrides:
   #  DATABASE_DIALECT: "postgresql"
   #  DATABASE_USER: "<existing-db-username>"
@@ -249,24 +253,24 @@ superset:
 
     echo "Downloading drivers"
 
-    curl --silent -Lo /app/superset/db_engine_specs/dhis2_api.py https://raw.githubusercontent.com/talexie/dhis2-docker/refs/heads/master/superset/dhis2_api.py
-    echo "Installed drivers successfully"
+    #curl --silent -Lo /app/superset/db_engine_specs/dhis2_api.py https://raw.githubusercontent.com/talexie/dhis2-docker/refs/heads/master/superset/dhis2_api.py
+    echo "Installing drivers"
 
-    pip install psycopg2-binary \
-      Pillow \
-      polars \
-      shapely \
-      sqlglot[rs] \
-      duckdb \
-      duckdb-engine \
-      'shillelagh[genericjsonapi]' \
-      sqlalchemy-solr \
-      'sqlparse>0.5,<0.6.0' \
-      sqlalchemydhis2>=1.0.71 \
-      "sqlalchemy>=1.4, <2" \
-      "sqlalchemy-utils>=0.38.3, <0.39" \
-      starrocks \
-      trino --retries 100 --timeout 60 && \
+    uv pip install .[postgres] \
+      .[psycopg2-binary] \
+      .[Pillow] \
+      .[polars] \
+      .[shapely] \
+      .[duckdb] \
+      .[duckdb-engine] \
+      .['shillelagh[genericjsonapi]'] \
+      .[sqlalchemy-solr] \
+      .[starrocks] \
+      .[singlestoredb] \
+      .[clickhouse-connect>=0.13.0] \
+      .[pymongosql] \
+      .[pydoris] \
+      .['apache-superset[trino]'] --retries 100 --timeout 60 && \
     if [ ! -f ~/bootstrap ]; then echo "Running Superset with uid {{ .Values.runAsUser }}" > ~/bootstrap; fi
 
 trino:

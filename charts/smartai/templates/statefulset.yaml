@@ -1,3 +1,4 @@
+{{- if .Values.enabled }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -128,3 +129,4 @@ spec:
         storageClassName: {{ .Values.storage.storageClass }}
         {{- end }}
   {{- end }}
+{{- end }}

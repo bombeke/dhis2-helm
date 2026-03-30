@@ -8,10 +8,10 @@ dependencies:
     repository: "https://valkey.io/valkey-helm"
     condition: valkey.enabled
     
-  - name: postgresql
-    version: "~12"
-    repository: "https://charts.bitnami.com/bitnami"
-    condition: postgresql.enabled
+  - name: stackgres-operator
+    version: "~1.17"
+    repository: "https://stackgres.io/downloads/stackgres-k8s/stackgres/helm"
+    condition: stackgres-operator.enabled
 
   - name: mariadb
     version: "~19"
@@ -37,10 +37,10 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 1.0.47
+version: 1.0.48
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "41.2.0"
+appVersion: "42.3.1"
