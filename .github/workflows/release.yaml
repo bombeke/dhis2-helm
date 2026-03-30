@@ -35,7 +35,6 @@ jobs:
           helm repo add jetstack https://charts.jetstack.io
           helm repo add starrocks https://starrocks.github.io/starrocks-kubernetes-operator
           helm repo add opensearch https://opensearch-project.github.io/helm-charts
-          helm repo add apache-solr https://solr.apache.org/charts
           helm repo add ollama-helm https://otwld.github.io/ollama-helm/
           helm repo add valkey https://valkey.io/valkey-helm
           helm repo add hyperdx https://hyperdxio.github.io/helm-charts
