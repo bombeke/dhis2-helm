@@ -217,7 +217,7 @@ superset:
   supersetNode:
     connections:
       # Redis must be set redis.enabled:false
-      redis_host: "smartai-valkey-primary.smartai.svc.cluster.local"
+      redis_host: "smartai-valkey.smartai.svc.cluster.local"
       redis_port: "6379"
       redis_user: ""
       # redis_password: superset
