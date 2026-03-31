@@ -37,7 +37,7 @@ spec:
 {{- end }}
 
 ---
-
+{{- if .Values.enabled }}
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -49,9 +49,9 @@ spec:
     {{- with .Values.extramiddleware.middleware.headers }}
     {{- toYaml . | nindent 6 }}
     {{- end }}
-
+{{- end }}
 ---
-
+{{- if .Values.enabled }}
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -62,3 +62,4 @@ spec:
   redirectScheme:
     scheme: https
     permanent: true
+{{- end }}
