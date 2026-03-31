@@ -1,5 +1,5 @@
 {{- $fullName := include "dashboard.fullname" . -}}
-{{- if .Values.persistence.enabled .Values.enabled }}
+{{- if and .Values.persistence.enabled .Values.enabled -}}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -20,7 +20,7 @@ spec:
 ---
 
 {{- $fullName := include "dashboard.fullname" . -}}
-{{- if .Values.persistence.enabled .Values.enabled }}
+{{- if and .Values.persistence.enabled .Values.enabled -}}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
