@@ -32,7 +32,6 @@ spec:
       type: ClusterIP
     replicas:
       type: ClusterIP
-  prometheusAutobind: true
 
 {{- end }}
 
