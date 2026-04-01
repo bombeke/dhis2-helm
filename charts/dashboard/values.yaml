@@ -138,7 +138,7 @@ extramiddleware:
       accessControlAllowHeaders: 
         - "*"
 pgVersion: "17"
-pgMinorVersion: 17.9
+pgMinorVersion: "17.9"
 profile: "development"
 
 # StackGres Operator

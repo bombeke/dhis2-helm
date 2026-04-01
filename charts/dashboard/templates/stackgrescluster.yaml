@@ -76,7 +76,7 @@ spec:
   sgCluster: {{ include "dashboard.fullname" . }}-stackgres-simple
 
   minorVersionUpgrade:
-    postgresVersion: {{ .Values.pgMinorVersion }}
+    postgresVersion: {{ .Values.pgMinorVersion | quote }}
 {{- end }}
 
 ---
