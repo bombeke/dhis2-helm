@@ -8,6 +8,7 @@ spec:
   {{- if .Values.stackgresOperator.profile }}
   profile: {{ .Values.stackgresOperator.profile }}
   {{- end }}
+  sgInstanceProfile: {{ include "dashboard.fullname" . }}-sgpf-small
   postgres:
     version: "17"
     extensions:
@@ -16,5 +17,34 @@ spec:
   pods:
     persistentVolume: 
       size: '5Gi'
+  configurations:
+    sgPostgresConfig: {{ include "dashboard.fullname" . }}-sgcf-small
 
+{{- end }}
+
+---
+
+{{- if .Values.stackgresOperator.enabled }}
+apiVersion: stackgres.io/v1
+kind: SGInstanceProfile
+metadata:
+  name: {{ include "dashboard.fullname" . }}-sgpf-small
+  labels:
+    {{- include "dashboard.labels" . | nindent 4 }}
+spec:
+  cpu: "1"
+  memory: "2Gi"
+{{- end }}
+
+---
+
+{{- if .Values.stackgresOperator.enabled }}
+apiVersion: stackgres.io/v1
+kind: SGPostgresConfig
+metadata:
+  name: {{ include "dashboard.fullname" . }}-sgcf-small
+  labels:
+    {{- include "dashboard.labels" . | nindent 4 }}
+spec:
+  postgresVersion: "17"
 {{- end }}
