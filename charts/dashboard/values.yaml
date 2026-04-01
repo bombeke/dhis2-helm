@@ -137,7 +137,9 @@ extramiddleware:
     headers:
       accessControlAllowHeaders: 
         - "*"
-pgVersion: "18.3"
+pgVersion: "17"
+pgMinorVersion: "17.9"
+
 # StackGres Operator
 stackgresOperator:
   enabled: true

@@ -48,3 +48,36 @@ metadata:
 spec:
   postgresVersion: {{ .Values.pgVersion }}
 {{- end }}
+
+---
+
+{{- if .Values.stackgresOperator.enabled }}
+apiVersion: stackgres.io/v1
+kind: SGDbOps
+metadata:
+  name: {{ include "dashboard.fullname" . }}-minor-upgrade
+  labels:
+    {{- include "dashboard.labels" . | nindent 4 }}
+spec:
+  op: minorVersionUpgrade
+  sgCluster: {{ include "dashboard.fullname" . }}-stackgres-simple
+
+  minorVersionUpgrade:
+    postgresVersion: {{ .Values.pgMinorVersion }}
+{{- end }}
+
+---
+
+{{- if .Values.stackgresOperator.enabled }}
+apiVersion: stackgres.io/v1
+kind: SGDbOps
+metadata:
+  name: {{ include "dashboard.fullname" . }}-sec-upgrade
+  labels:
+    {{- include "dashboard.labels" . | nindent 4 }}
+spec:
+  sgCluster: {{ include "dashboard.fullname" . }}-stackgres-simple
+  op: securityUpgrade
+  securityUpgrade:
+    method: InPlace
+{{- end }}
