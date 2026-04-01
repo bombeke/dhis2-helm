@@ -257,6 +257,7 @@ superset:
     #!/bin/bash
 
     echo "Installing extra drivers"
+    apt-get update && apt-get install -y pkg-config default-libmysqlclient-dev build-essential
 
     uv pip install .[postgres] \
       psycopg2-binary \
@@ -270,9 +271,7 @@ superset:
       starrocks \
       singlestoredb \
       "clickhouse-connect>=0.13.0" \
-      pymongosql \
-      pydoris \
-      "apache-superset[trino]" && \
+      pymongosql && \
     if [ ! -f ~/bootstrap ]; then echo "Running Superset with uid {{ .Values.runAsUser }}" > ~/bootstrap; fi
 
 trino:
