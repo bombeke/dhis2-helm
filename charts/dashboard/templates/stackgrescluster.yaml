@@ -5,6 +5,9 @@ metadata:
   name: {{ include "dashboard.fullname" . }}-stackgres-simple
 spec:
   instances: 1
+  {{-if .Values.stackgresOperator.profile }}
+  profile: {{ .Values.stackgresOperator.profile }}
+  {{- end }}
   postgres:
     version: "17"
     extensions:
