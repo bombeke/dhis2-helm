@@ -10,7 +10,7 @@ spec:
   {{- end }}
   sgInstanceProfile: {{ include "dashboard.fullname" . }}-sgpf-small
   postgres:
-    version: "17"
+    version:  {{ .Values.pgVersion }}
     extensions:
     - name: postgis
     - name: timescaledb
@@ -46,5 +46,5 @@ metadata:
   labels:
     {{- include "dashboard.labels" . | nindent 4 }}
 spec:
-  postgresVersion: "17"
+  postgresVersion: {{ .Values.pgVersion }}
 {{- end }}

@@ -137,10 +137,11 @@ extramiddleware:
     headers:
       accessControlAllowHeaders: 
         - "*"
+pgVersion: "18.3"
 # StackGres Operator
 stackgresOperator:
   enabled: true
-  version: "17"
+  
   profile: "development"
 
 # Custom Cache Valkey
