@@ -236,7 +236,7 @@ superset:
       # PostgreSQL must be set postgresql.enabled:false
       # -- Database type for Superset metadata (Supported types: "postgresql", "mysql")
       db_type: "postgresql"
-      db_host: "smartai-stackgres.smartai.svc.cluster.local"
+      db_host: "smartai-stackgres-simple.smartai.svc.cluster.local"
       db_port: "5432"
       db_user: superset
       db_pass: superset
@@ -256,26 +256,23 @@ superset:
   bootstrapScript: |
     #!/bin/bash
 
-    echo "Downloading drivers"
-
-    #curl --silent -Lo /app/superset/db_engine_specs/dhis2_api.py https://raw.githubusercontent.com/talexie/dhis2-docker/refs/heads/master/superset/dhis2_api.py
-    echo "Installing drivers"
+    echo "Installing extra drivers"
 
     uv pip install .[postgres] \
-      .[psycopg2-binary] \
-      .[Pillow] \
-      .[polars] \
-      .[shapely] \
-      .[duckdb] \
-      .[duckdb-engine] \
-      .['shillelagh[genericjsonapi]'] \
-      .[sqlalchemy-solr] \
-      .[starrocks] \
-      .[singlestoredb] \
-      .[clickhouse-connect>=0.13.0] \
-      .[pymongosql] \
-      .[pydoris] \
-      .['apache-superset[trino]'] --retries 100 --timeout 60 && \
+      psycopg2-binary \
+      Pillow \
+      polars \
+      shapely \
+      duckdb \
+      duckdb-engine \
+      "shillelagh[genericjsonapi]" \
+      sqlalchemy-solr \
+      starrocks \
+      singlestoredb \
+      "clickhouse-connect>=0.13.0" \
+      pymongosql \
+      pydoris \
+      "apache-superset[trino]" && \
     if [ ! -f ~/bootstrap ]; then echo "Running Superset with uid {{ .Values.runAsUser }}" > ~/bootstrap; fi
 
 trino:
