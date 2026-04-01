@@ -6,7 +6,7 @@ metadata:
 spec:
   instances: 1
   {{- if .Values.stackgresOperator.profile }}
-  profile: {{ .Values.stackgresOperator.profile }}
+  profile: {{ .Values.profile }}
   {{- end }}
   sgInstanceProfile: {{ include "dashboard.fullname" . }}-sgpf-small
   postgres:
@@ -14,11 +14,25 @@ spec:
     extensions:
     - name: postgis
     - name: timescaledb
+    - name: 'pg_repack'
+    - name: 'pg_trgm'
   pods:
     persistentVolume: 
       size: '5Gi'
+    scheduling:
+      tolerations:
+        - key: "stackgres"
+          operator: "Exists"
+          effect: "NoSchedule"
+
   configurations:
     sgPostgresConfig: {{ include "dashboard.fullname" . }}-sgcf-small
+  postgresServices:
+    primary:
+      type: ClusterIP
+    replicas:
+      type: ClusterIP
+  prometheusAutobind: true
 
 {{- end }}
 

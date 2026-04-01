@@ -139,12 +139,13 @@ extramiddleware:
         - "*"
 pgVersion: "17"
 pgMinorVersion: "17.9"
+profile: "development"
 
 # StackGres Operator
 stackgresOperator:
   enabled: true
   
-  profile: "development"
+
 
 # Custom Cache Valkey
 valkey:
