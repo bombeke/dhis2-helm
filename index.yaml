@@ -2582,6 +2582,37 @@ entries:
   dashboard:
   - apiVersion: v2
     appVersion: 1.0.0
+    created: "2026-04-01T07:52:47.923475561Z"
+    dependencies:
+    - condition: superset.enabled
+      name: superset
+      repository: https://apache.github.io/superset
+      version: ~0
+    - condition: trino.enabled
+      name: trino
+      repository: https://trinodb.github.io/charts
+      version: ~0
+    - condition: kube-starrocks.enabled
+      name: kube-starrocks
+      repository: https://starrocks.github.io/starrocks-kubernetes-operator
+      version: ~1
+    - condition: stackgres-operator.enabled
+      name: stackgres-operator
+      repository: https://stackgres.io/downloads/stackgres-k8s/stackgres/helm
+      version: ~1.17
+    - condition: valkey.enabled
+      name: valkey
+      repository: https://valkey.io/valkey-helm
+      version: ~0
+    description: A Helm chart for Kubernetes
+    digest: 5f2bb0dfb605e0a0237fe9e8aed87f9bdd8735f9f7fe5e09a4096caa7fae1500
+    name: dashboard
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/dashboard-0.1.45/dashboard-0.1.45.tgz
+    version: 0.1.45
+  - apiVersion: v2
+    appVersion: 1.0.0
     created: "2026-04-01T07:33:22.994664781Z"
     dependencies:
     - condition: superset.enabled
@@ -4444,4 +4475,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2026-04-01T07:33:23.380058304Z"
+generated: "2026-04-01T07:52:48.312891912Z"
