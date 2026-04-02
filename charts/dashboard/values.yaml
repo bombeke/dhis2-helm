@@ -140,11 +140,7 @@ extramiddleware:
 pgVersion: "17"
 pgMinorVersion: "17.6"
 profile: "development"
-credentials:
-  superset:
-    db_name: "superset"
-    db_username: "superset"
-    db_password: "superset"
+credentials: {}
   # This is for setting up the credentials more information can be found here: https://github.com/stackgres/stackgres-operator/blob/main/docs/credentials.md
   #   users:
   #     superuser:
@@ -232,7 +228,7 @@ superset:
 
   configOverrides:
     sql_connect: |
-      SQLALCHEMY_DATABASE_URI: "postgresql+psycopg2://{{ .Values.credentials.superset.db_username }}:{{ .Values.credentials.superset.db_password }}@{{ include "dashboard.fullname" . }}-stackgres-simple:5432/{{ .Values.credentials.superset.db_name }}"
+      SQLALCHEMY_DATABASE_URI: "postgresql+psycopg2://{{ .Values.supersetNode.connections.db_user | "superset" }}:{{ .Values.supersetNode.connections.db_pass | "superset" }}@{{ include "dashboard.fullname" . }}-stackgres-simple:5432/{{ .Values.supersetNode.connections.db_name | "superset" }}"
     secret: |
       from superset.constants import CHANGE_ME_SECRET_KEY
       print(f"Setting up secret key for Superset Admin")
