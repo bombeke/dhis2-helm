@@ -3,6 +3,8 @@ apiVersion: stackgres.io/v1
 kind: SGCluster
 metadata:
   name: {{ include "dashboard.fullname" . }}-stackgres-simple
+  labels:
+    {{- include "dashboard.labels" . | nindent 4 }}
 spec:
   instances: 1
   {{- if .Values.stackgresOperator.profile }}
@@ -24,9 +26,78 @@ spec:
         - key: "stackgres"
           operator: "Exists"
           effect: "NoSchedule"
-
+  {{- with .Values.cluster.managedSql.enabled }}
+  managedSql:
+  {{- with .continueOnSGScriptError }}
+    continueOnSGScriptError: {{ . }}
+  {{- end }}
+    scripts:
+    - sgScript: {{ include "dashboard.fullname" . }}-scripts
+  {{- end }}
   configurations:
     sgPostgresConfig: {{ include "dashboard.fullname" . }}-sgcf-small
+    {{- with .Values.cluster.configurations.patroni }}
+    patroni:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- if .Values.credentials }}
+    credentials:
+      {{- with .Values.credentials.patroni }}
+      patroni:
+        {{- with .restApiPassword }}
+        restApiPassword:
+          name: {{ include "dashboard.fullname" . }}-users
+          key: restapi-password
+        {{- end }}
+      {{- end }}
+      {{- with .Values.credentials.users }}
+      users:
+        {{- with .superuser }}
+        superuser:
+          {{- with .username }}
+          username:
+            name: {{ include "dashboard.fullname" . }}-users
+            key: superuser-username
+          {{- end }}
+          {{- with .password }}
+          password:
+            name: {{ include "dashboard.fullname" . }}-users
+            key: superuser-password
+          {{- end }}
+        {{- end }}
+        {{- with .replication }}
+        replication:
+          {{- with .username }}
+          username:
+            name: {{ include "dashboard.fullname" . }}-users
+            key: replication-username
+          {{- end }}
+          {{- with .password }}
+          password:
+            name: {{ include "dashboard.fullname" . }}-users
+            key: replication-password
+          {{- end }}
+        {{- end }}
+        {{- with .authenticator }}
+        authenticator:
+          {{- with .username }}
+          username:
+            name: {{ include "dashboard.fullname" . }}-users
+            key: authenticator-username
+          {{- end }}
+          {{- with .password }}
+          password:
+            name: {{ include "dashboard.fullname" . }}-users
+            key: authenticator-password
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- else }}
+    {{- with .Values.cluster.configurations.credentials }}
+    credentials:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- end }}
   postgresServices:
     primary:
       type: ClusterIP

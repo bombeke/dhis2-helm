@@ -1,0 +1,24 @@
+{{- if .Values.cluster.managedSql.enabled }}
+apiVersion: stackgres.io/v1
+kind: SGScript
+metadata:
+  name: {{ include "dashboard.fullname" . }}-scripts
+  labels:
+    {{- include "dashboard.labels" . | nindent 4 }}
+  {{- if and .Values.cluster.create }}
+  annotations:
+    helm.sh/hook: "pre-install"
+  {{- end }}
+spec:
+  {{- if .Values.cluster.managedSql.continueOnError }}
+  continueOnError: {{ .Values.cluster.managedSql.continueOnError }}
+  {{- end }}
+  scripts:
+  - name: create-superset-database
+    script: |
+      CREATE USER {{ .Values.credentials.superset.db_username }} WITH PASSWORD '{{ .Values.credentials.superset.db_password }}';
+      CREATE DATABASE {{ .Values.credentials.superset.db_name }} WITH OWNER {{ .Values.credentials.superset.db_username }} encoding 'utf8';
+  {{- if .Values.cluster.managedSql.scripts }}
+  {{- toYaml .Values.cluster.managedSql.scripts | nindent 2 }}
+  {{- end }}
+{{- end }}

@@ -140,7 +140,56 @@ extramiddleware:
 pgVersion: "17"
 pgMinorVersion: "17.6"
 profile: "development"
+credentials:
+  superset:
+    db_name: "superset"
+    db_username: "superset"
+    db_password: "superset"
+  # This is for setting up the credentials more information can be found here: https://github.com/stackgres/stackgres-operator/blob/main/docs/credentials.md
+  #   users:
+  #     superuser:
+  #       username:
+  #         name:
+  #         key:
+  #       password:
+  #         name:
+  #         key:
+  #     replication:
+  #       username:
+  #         name:
+  #         key:
+  #       password:
+  #         name:
+  #         key:
+  #     authenticator:
+  #       username:
+  #         name:
+  #         key:
+  #       password:
+  #         name:
+  #         key:
+cluster:
+  configurations: {}
 
+  managedSql:
+    enabled: true
+  #  continueOnSGScriptError:
+  #  continueOnError:
+  #  scripts:
+  #  - name: create-stackgres-user
+  #    scriptFrom:
+  #      secretKeyRef: # read the user from a Secret to maintain credentials in a safe place
+  #        name: stackgres-secret-sqls-scripts
+  #        key: create-stackgres-user.sql
+  #  - name: create-stackgres-database
+  #    script: |
+  #      CREATE DATABASE stackgres WITH OWNER stackgres;
+  #  - name: create-stackgres-schema
+  #    database: stackgres
+  #    scriptFrom:
+  #      configMapKeyRef: # read long script from a ConfigMap to avoid have to much data in the helm releasea and the sgcluster CR
+  #        name: stackgres-sqls-scripts
+  #        key: create-stackgres-schema.sql
 # StackGres Operator
 stackgresOperator:
   enabled: true
@@ -183,10 +232,10 @@ superset:
 
   configOverrides:
     sql_connect: |
-      SQLALCHEMY_DATABASE_URI: "postgresql+psycopg2://{{ .Values.postgresql.auth.username }}:{{ .Values.postgresql.auth.password }}@{{ .Values.postgresql.fullnameOverride }}:5432/{{ .Values.postgresql.auth.database }}"
+      SQLALCHEMY_DATABASE_URI: "postgresql+psycopg2://{{ .Values.credentials.superset.db_username }}:{{ .Values.credentials.superset.db_password }}@{{ include "dashboard.fullname" . }}-stackgres-simple:5432/{{ .Values.credentials.superset.db_name }}"
     secret: |
       from superset.constants import CHANGE_ME_SECRET_KEY
-      print(f"Setting up secret key for Superset for {{ .Values.postgresql.auth.username }}")
+      print(f"Setting up secret key for Superset Admin")
       SECRET_KEY= os.getenv("SECRET_KEY") or os.getenv("SUPERSET_SECRET_KEY") or CHANGE_ME_SECRET_KEY
       if SECRET_KEY is None or SECRET_KEY == 'CHANGE_ME_TO_A_COMPLEX_RANDOM_SECRET' or SECRET_KEY =='thisISaSECRET_1234':
         import secrets
