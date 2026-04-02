@@ -228,7 +228,7 @@ superset:
 
   configOverrides:
     sql_connect: |
-      SQLALCHEMY_DATABASE_URI: "postgresql+psycopg2://{{ .Values.supersetNode.connections.db_user | "superset" }}:{{ .Values.supersetNode.connections.db_pass | "superset" }}@{{ include "dashboard.fullname" . }}-stackgres-simple:5432/{{ .Values.supersetNode.connections.db_name | "superset" }}"
+      SQLALCHEMY_DATABASE_URI: "postgresql+psycopg2://{{ .Values.supersetNode.connections.db_user | default "superset" }}:{{ .Values.supersetNode.connections.db_pass | default "superset" }}@{{ include "dashboard.fullname" . }}-stackgres-simple:5432/{{ .Values.supersetNode.connections.db_name | default "superset" }}"
     secret: |
       from superset.constants import CHANGE_ME_SECRET_KEY
       print(f"Setting up secret key for Superset Admin")

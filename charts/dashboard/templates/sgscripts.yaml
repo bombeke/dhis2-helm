@@ -16,8 +16,8 @@ spec:
   scripts:
   - name: create-superset-database
     script: |
-      CREATE USER {{ .Values.superset.supersetNode.connections.db_user | "superset" }} WITH PASSWORD '{{ .Values.superset.supersetNode.connections.db_pass | "superset" }}';
-      CREATE DATABASE {{ .Values.superset.supersetNode.connections.db_name | "superset" }} WITH OWNER {{ .Values.superset.supersetNode.connections.db_user | "superset" }} encoding 'utf8';
+      CREATE USER {{ .Values.superset.supersetNode.connections.db_user | default "superset" }} WITH PASSWORD '{{ .Values.superset.supersetNode.connections.db_pass | default "superset" }}';
+      CREATE DATABASE {{ .Values.superset.supersetNode.connections.db_name | default "superset" }} WITH OWNER {{ .Values.superset.supersetNode.connections.db_user | default "superset" }} encoding 'utf8';
   {{- if .Values.cluster.managedSql.scripts }}
   {{- toYaml .Values.cluster.managedSql.scripts | nindent 2 }}
   {{- end }}
