@@ -28,9 +28,6 @@ spec:
           effect: "NoSchedule"
   {{- with .Values.cluster.managedSql.enabled }}
   managedSql:
-  {{- with .continueOnSGScriptError }}
-    continueOnSGScriptError: {{ . }}
-  {{- end }}
     scripts:
     - sgScript: {{ include "dashboard.fullname" . }}-scripts
   {{- end }}
