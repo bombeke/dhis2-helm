@@ -4,13 +4,13 @@ kind: SGCluster
 metadata:
   name: {{ include "dashboard.fullname" . }}-stackgres-simple
   labels:
-    {{- include "dashboard.labels" . | nindent 4 }}
+    {{- include "dashboard.labels" $ | nindent 4 }}
 spec:
   instances: 1
-  {{- if .Values.stackgresOperator.profile }}
+  {{- if .Values.profile }}
   profile: {{ .Values.profile }}
   {{- end }}
-  sgInstanceProfile: {{ include "dashboard.fullname" . }}-sgpf-small
+  sgInstanceProfile: {{ include "dashboard.fullname" $ }}-sgpf-small
   postgres:
     version:  {{ .Values.pgVersion | quote }}
     extensions:
@@ -26,13 +26,13 @@ spec:
         - key: "stackgres"
           operator: "Exists"
           effect: "NoSchedule"
-  {{- with .Values.cluster.managedSql.enabled }}
+  {{- if and .Values.cluster.managedSql.enabled }}
   managedSql:
     scripts:
-    - sgScript: {{ include "dashboard.fullname" . }}-scripts
+    - sgScript: {{ include "dashboard.fullname" $ }}-scripts
   {{- end }}
   configurations:
-    sgPostgresConfig: {{ include "dashboard.fullname" . }}-sgcf-small
+    sgPostgresConfig: {{ include "dashboard.fullname" $ }}-sgcf-small
     {{- with .Values.cluster.configurations.patroni }}
     patroni:
       {{- toYaml . | nindent 6 }}
@@ -43,7 +43,7 @@ spec:
       patroni:
         {{- with .restApiPassword }}
         restApiPassword:
-          name: {{ include "dashboard.fullname" . }}-users
+          name: {{ include "dashboard.fullname" $ }}-users
           key: restapi-password
         {{- end }}
       {{- end }}
@@ -53,12 +53,12 @@ spec:
         superuser:
           {{- with .username }}
           username:
-            name: {{ include "dashboard.fullname" . }}-users
+            name: {{ include "dashboard.fullname" $ }}-users
             key: superuser-username
           {{- end }}
           {{- with .password }}
           password:
-            name: {{ include "dashboard.fullname" . }}-users
+            name: {{ include "dashboard.fullname" $ }}-users
             key: superuser-password
           {{- end }}
         {{- end }}
@@ -66,12 +66,12 @@ spec:
         replication:
           {{- with .username }}
           username:
-            name: {{ include "dashboard.fullname" . }}-users
+            name: {{ include "dashboard.fullname" $ }}-users
             key: replication-username
           {{- end }}
           {{- with .password }}
           password:
-            name: {{ include "dashboard.fullname" . }}-users
+            name: {{ include "dashboard.fullname" $ }}-users
             key: replication-password
           {{- end }}
         {{- end }}
@@ -79,12 +79,12 @@ spec:
         authenticator:
           {{- with .username }}
           username:
-            name: {{ include "dashboard.fullname" . }}-users
+            name: {{ include "dashboard.fullname" $ }}-users
             key: authenticator-username
           {{- end }}
           {{- with .password }}
           password:
-            name: {{ include "dashboard.fullname" . }}-users
+            name: {{ include "dashboard.fullname" $ }}-users
             key: authenticator-password
           {{- end }}
         {{- end }}

@@ -2,9 +2,9 @@
 apiVersion: stackgres.io/v1
 kind: SGScript
 metadata:
-  name: {{ include "dashboard.fullname" . }}-scripts
+  name: {{ include "dashboard.fullname" $ }}-scripts
   labels:
-    {{- include "dashboard.labels" . | nindent 4 }}
+    {{- include "dashboard.labels" $ | nindent 4 }}
   {{- if and .Values.cluster.create }}
   annotations:
     helm.sh/hook: "pre-install"
