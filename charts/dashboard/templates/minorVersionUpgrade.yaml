@@ -1,0 +1,17 @@
+{{- if and .Values.stackgresOperator.enabled .Values.cluster.minorVersionUpgrade.enabled}}
+apiVersion: stackgres.io/v1
+kind: SGDbOps
+metadata:
+  name: {{ include "dashboard.fullname" . }}-minor-upgrade
+  labels:
+    {{- include "dashboard.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+spec:
+  op: minorVersionUpgrade
+  sgCluster: {{ include "dashboard.fullname" . }}-stackgres-simple
+
+  minorVersionUpgrade:
+    postgresVersion: {{ .Values.pgMinorVersion | quote }}
+{{- end }}
