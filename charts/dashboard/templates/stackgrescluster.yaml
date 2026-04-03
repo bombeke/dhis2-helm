@@ -112,6 +112,10 @@ metadata:
   name: {{ include "dashboard.fullname" . }}-sgpf-small
   labels:
     {{- include "dashboard.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   cpu: "1"
   memory: "2Gi"
@@ -126,6 +130,10 @@ metadata:
   name: {{ include "dashboard.fullname" . }}-sgcf-small
   labels:
     {{- include "dashboard.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   postgresVersion: {{ .Values.pgVersion | quote }}
 {{- end }}

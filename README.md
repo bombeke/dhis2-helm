@@ -48,6 +48,60 @@ helm install psmdb-operator-crds percona/psmdb-operator-crds --namespace psmdb -
 helm install smart dhis2/smartai -n smart --create-namespace -f values.yaml
 
 ```
+## Installing Dashboard
+Install PostgreSQL database
+```sh
+    helm repo add stackgres-charts https://stackgres.io/downloads/stackgres-k8s/stackgres/helm/
+    helm install --create-namespace --namespace stackgres stackgres-operator stackgres-charts/stackgres-operator
+```
+Example dashboard.yaml
+```yaml
+pgMinorVersion: "17.6"
+superset:
+  ingress:
+    hosts:
+      -  example2.com
+    annotations:
+      #kubernetes.io/ingress.class: nginx
+      cert-manager.io/cluster-issuer: le-prod
+  init:
+    loadExamples: true
+
+  extraSecretEnv:
+    SUPERSET_SECRET_KEY: RANDOM_KEY
+  supersetNode:
+    startupProbe: {}
+    livenessProbe: {}
+    readinessProbe: {}
+    connections:
+      # Redis must be set redis.enabled:false
+      redis_host: "dashboard-valkey.dashboard.svc.cluster.local"
+      # postgresql must be set postgresql.enabled:false
+      db_host: "dashboard-stackgres-simple.dashboard.svc.cluster.local"
+
+ingress:
+  enabled: true
+  certIssuer: le-prod
+  path: "/"
+  pathType: "ImplementationSpecific"
+  hostname: "example.com"
+  cert-manager.io/cluster-issuer: le-prod
+  ingress.kubernetes.io/ssl-redirect: "true"
+  traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  traefik.ingress.kubernetes.io/router.middlewares: superset1-dashboard-cors-middleware@kubernetescrd
+extramiddleware:
+  middleware:
+    headers:
+      customResponseHeaders:
+        Access-Control-Allow-Origin: "*"
+        Access-Control-Allow-Methods: "GET, POST, OPTIONS"
+        Access-Control-Allow-Headers: "Range, Origin, Accept, Content-Type"
+
+```
+Install dashboard chart
+```sh
+    helm upgrade --install dashboard dhis2/dashboard --namespace dashboard --create-namespace -f dashboard.yaml
+```
 ## Installing SmartAI 
 [DHIS2 smartai helm chart](./charts/smartai) is published to
 https://bombeke.github.io/dhis2-helm
