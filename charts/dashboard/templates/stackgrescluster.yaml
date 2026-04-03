@@ -140,7 +140,7 @@ spec:
 
 ---
 
-{{- if and .Values.stackgresOperator.enabled .Values.stackgresOperator.minorVersionUpgrade.enabled}}
+{{- if and .Values.stackgresOperator.enabled .Values.cluster.minorVersionUpgrade.enabled}}
 apiVersion: stackgres.io/v1
 kind: SGDbOps
 metadata:
@@ -157,7 +157,7 @@ spec:
 
 ---
 
-{{- if and .Values.stackgresOperator.enabled .Values.stackgresOperator.securityUpgrade.enabled}}
+{{- if and .Values.stackgresOperator.enabled .Values.cluster.securityUpgrade.enabled}}
 apiVersion: stackgres.io/v1
 kind: SGDbOps
 metadata:

@@ -165,6 +165,10 @@ credentials: {}
   #         name:
   #         key:
 cluster:
+  minorVersionUpgrade:
+    enabled: false
+  securityUpgrade:
+    enabled: false
   configurations: {}
 
   managedSql:
