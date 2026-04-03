@@ -189,9 +189,9 @@ cluster:
 # StackGres Operator
 stackgresOperator:
   enabled: true
-  
 
-
+stackgres-operator:
+  enabled: true
 # Custom Cache Valkey
 valkey:
   enabled: true
