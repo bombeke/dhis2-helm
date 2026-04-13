@@ -1304,6 +1304,29 @@ entries:
   core:
   - apiVersion: v2
     appVersion: 42.3.1
+    created: "2026-04-13T15:53:18.129390075Z"
+    dependencies:
+    - condition: valkey.enabled
+      name: valkey
+      repository: https://valkey.io/valkey-helm
+      version: ~0
+    - condition: mariadb.enabled
+      name: mariadb
+      repository: https://charts.bitnami.com/bitnami
+      version: ~19
+    - condition: casdoor-helm-charts.enabled
+      name: casdoor-helm-charts
+      repository: oci://registry-1.docker.io/casbin
+      version: ~3.13
+    description: DHIS 2 Helm Chart
+    digest: e47364bfcbaa3f1401a398579e72fb38e1670fa2b353b558d4791e5bd602fbda
+    name: core
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/core-1.0.49/core-1.0.49.tgz
+    version: 1.0.49
+  - apiVersion: v2
+    appVersion: 42.3.1
     created: "2026-03-30T11:13:56.310086346Z"
     dependencies:
     - condition: valkey.enabled
@@ -5102,4 +5125,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2026-04-03T19:32:11.070076169Z"
+generated: "2026-04-13T15:53:18.822216794Z"
