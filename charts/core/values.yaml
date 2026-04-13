@@ -409,10 +409,7 @@ valkey:
   auth:
     enabled: false
 
-# StackGres Operator
-stackgresOperator:
-  enabled: false
-  
+
 postgresql:
   enabled: true
   debug: false
