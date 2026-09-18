@@ -1,0 +1,81 @@
+{{- if .Values.topics }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "%s-topics" (include "kafka.fullname" .) | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "kafka.labels" . | nindent 4 }}
+    app.kubernetes.io/component: topics
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.topicsJob.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "kafka.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: topics
+        {{ include "kafka.clientLabel" . }}: "true"
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "kafka.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: topics
+          image: {{ include "kafka.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            - name: BOOTSTRAP
+              value: {{ include "kafka.bootstrapServers" . | quote }}
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xmx128m"
+            - name: LOG_DIR
+              value: /tmp
+          command: ["/bin/bash", "-ec"]
+          args:
+            - |
+              deadline=$(( $(date +%s) + {{ .Values.topicsJob.waitTimeoutSeconds }} ))
+              until /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server "$BOOTSTRAP" >/dev/null 2>&1; do
+                if [ "$(date +%s)" -ge "$deadline" ]; then
+                  echo "broker at $BOOTSTRAP not ready after {{ .Values.topicsJob.waitTimeoutSeconds }}s" >&2
+                  exit 1
+                fi
+                echo "waiting for $BOOTSTRAP ..."
+                sleep 5
+              done
+              {{- range .Values.topics }}
+              /opt/kafka/bin/kafka-topics.sh --bootstrap-server "$BOOTSTRAP" --create --if-not-exists \
+                --topic {{ .name | quote }}
+                {{- with .partitions }} \
+                --partitions {{ . }}
+                {{- end }}
+                {{- with .replicationFactor }} \
+                --replication-factor {{ . }}
+                {{- end }}
+                {{- range $k, $v := .config }} \
+                --config {{ printf "%s=%s" $k (include "kafka.propValue" $v) | quote }}
+                {{- end }}
+              {{- end }}
+              echo "topics on $BOOTSTRAP:"
+              /opt/kafka/bin/kafka-topics.sh --bootstrap-server "$BOOTSTRAP" --list
+          resources:
+            {{- toYaml .Values.topicsJob.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+{{- end }}

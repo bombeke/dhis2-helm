@@ -1,0 +1,40 @@
+{{- if and .Values.ui.enabled .Values.ui.ingress.enabled }}
+{{- $ing := .Values.ui.ingress }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "kafka.uiName" . }}
+  labels:
+    {{- include "kafka.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+  {{- if or $ing.annotations $ing.certIssuer }}
+  annotations:
+    {{- with $ing.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if $ing.certIssuer }}
+    cert-manager.io/cluster-issuer: {{ $ing.certIssuer | quote }}
+    {{- end }}
+  {{- end }}
+spec:
+  {{- with $ing.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if $ing.certIssuer }}
+  tls:
+    - secretName: {{ $ing.hostname | replace "." "-" }}-tls
+      hosts:
+        - {{ $ing.hostname | quote }}
+  {{- end }}
+  rules:
+    - host: {{ $ing.hostname | quote }}
+      http:
+        paths:
+          - path: {{ $ing.path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "kafka.uiName" . }}
+                port:
+                  name: http
+{{- end }}

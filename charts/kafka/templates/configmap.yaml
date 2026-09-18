@@ -1,0 +1,57 @@
+{{- include "kafka.validate" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kafka.fullname" . }}
+  labels:
+    {{- include "kafka.labels" . | nindent 4 }}
+    app.kubernetes.io/component: broker
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  # Read by the image's docker wrapper from /mnt/shared/config. Environment
+  # variables set on the pod (node.id, listeners, advertised.listeners) are
+  # applied on top.
+  server.properties: |
+    # --- KRaft combined mode: every node is both broker and controller.
+    process.roles=broker,controller
+    controller.listener.names={{ .Values.listeners.controller.name }}
+    controller.quorum.voters={{ include "kafka.quorumVoters" . }}
+
+    # --- Listeners. The client listener is the in-cluster one. The controller
+    # listener carries the KRaft quorum and is never advertised.
+    {{- $protocols := list (printf "%s:PLAINTEXT" .Values.listeners.controller.name) (printf "%s:PLAINTEXT" .Values.listeners.client.name) }}
+    {{- if .Values.externalAccess.enabled }}
+    {{- $protocols = append $protocols (printf "%s:PLAINTEXT" .Values.externalAccess.name) }}
+    {{- end }}
+    listener.security.protocol.map={{ join "," $protocols }}
+    inter.broker.listener.name={{ .Values.listeners.client.name }}
+
+    log.dirs={{ .Values.persistence.mountPath }}
+
+    # --- values.yaml `config`
+    {{- range $k, $v := .Values.config }}
+    {{ $k }}={{ include "kafka.propValue" $v }}
+    {{- end }}
+
+  # Log to stdout only. The image's default config also writes files that it
+  # rotates hourly but never deletes, so they would fill the log volume.
+  log4j2.yaml: |
+    Configuration:
+      Appenders:
+        Console:
+          name: STDOUT
+          PatternLayout:
+            pattern: "[%d] %p %m (%c)%n"
+      Loggers:
+        Root:
+          level: {{ .Values.logLevel }}
+          AppenderRef:
+            - ref: STDOUT
+        Logger:
+          - name: kafka.request.logger
+            level: WARN
+          - name: kafka.network.RequestChannel$
+            level: WARN

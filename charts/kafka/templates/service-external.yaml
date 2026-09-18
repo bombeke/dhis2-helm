@@ -1,0 +1,33 @@
+{{- if .Values.externalAccess.enabled }}
+{{- $fullname := include "kafka.fullname" . }}
+{{- range $i := until (int .Values.replicaCount) }}
+{{- $port := add (int $.Values.externalAccess.basePort) $i }}
+# One Service per broker: an external client must reach the exact broker that
+# advertised <host>:{{ $port }}.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ printf "%s-external-%d" $fullname $i | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "kafka.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: broker
+  {{- with $.Values.externalAccess.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ $.Values.externalAccess.service.type }}
+  ports:
+    - name: external
+      port: {{ $port }}
+      targetPort: external
+      protocol: TCP
+      {{- if eq $.Values.externalAccess.service.type "NodePort" }}
+      nodePort: {{ $port }}
+      {{- end }}
+  selector:
+    {{- include "kafka.selectorLabels" $ | nindent 4 }}
+    statefulset.kubernetes.io/pod-name: {{ printf "%s-%d" $fullname $i }}
+---
+{{- end }}
+{{- end }}

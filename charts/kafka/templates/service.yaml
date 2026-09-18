@@ -1,13 +1,52 @@
+# Bootstrap service for in-cluster clients. After the first connection,
+# clients talk to each broker at its advertised per-pod DNS name.
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "common.names.fullname" . }}-connect
-  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
-    app.kubernetes.io/component: connector
+  name: {{ include "kafka.fullname" . }}
+  labels:
+    {{- include "kafka.labels" . | nindent 4 }}
+    app.kubernetes.io/component: broker
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
+  type: ClusterIP
   ports:
-    - protocol: TCP
-      port: 8083
-      targetPort: connector
-  selector: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
-    app.kubernetes.io/component: connector
+    - name: client
+      port: {{ .Values.listeners.client.port }}
+      targetPort: client
+      protocol: TCP
+  selector:
+    {{- include "kafka.selectorLabels" . | nindent 4 }}
+---
+# Gives each pod a stable DNS name for advertised.listeners and the KRaft
+# quorum. Not-ready addresses are published because controllers must find
+# each other before any of them can become ready.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kafka.headlessName" . }}
+  labels:
+    {{- include "kafka.labels" . | nindent 4 }}
+    app.kubernetes.io/component: broker
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: client
+      port: {{ .Values.listeners.client.port }}
+      targetPort: client
+      protocol: TCP
+    - name: controller
+      port: {{ .Values.listeners.controller.port }}
+      targetPort: controller
+      protocol: TCP
+  selector:
+    {{- include "kafka.selectorLabels" . | nindent 4 }}

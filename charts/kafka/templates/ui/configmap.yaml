@@ -1,0 +1,30 @@
+{{- if .Values.ui.enabled }}
+{{- $base := dict
+  "server" (dict "port" 8080)
+  "dynamic" (dict "config" (dict "enabled" .Values.ui.dynamicConfig))
+  "kafka" (dict "clusters" (list (dict
+      "name" .Values.ui.clusterName
+      "bootstrapServers" (include "kafka.bootstrapServers" .)
+      "readOnly" .Values.ui.readOnly)))
+  "auth" (dict "type" (ternary "LOGIN_FORM" "DISABLED" .Values.ui.auth.enabled))
+}}
+{{- if .Values.ui.auth.enabled }}
+{{- $_ := set $base "spring" (dict "security" (dict "user" (dict "name" .Values.ui.auth.username))) }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kafka.uiName" . }}
+  labels:
+    {{- include "kafka.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  # The password is not stored here. It comes from the Secret through
+  # SPRING_SECURITY_USER_PASSWORD.
+  config.yml: |
+    {{- mergeOverwrite $base (deepCopy .Values.ui.extraConfig) | toYaml | nindent 4 }}
+{{- end }}

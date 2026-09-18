@@ -1,22 +1,50 @@
-1. Get the application URL by running these commands:
-{{- if .Values.ingress.enabled }}
-{{- range $host := .Values.ingress.hosts }}
-  {{- range .paths }}
-  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
-  {{- end }}
+Kafka {{ .Chart.AppVersion }} (KRaft combined mode, {{ .Values.replicaCount }} node{{ if gt (int .Values.replicaCount) 1 }}s{{ end }}).
+
+In-cluster bootstrap servers:
+  {{ include "kafka.bootstrapServers" . }}
+{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.allowExternal) }}
+
+The NetworkPolicy only lets labelled pods reach the client port. Add this
+label to client pods:
+  {{ include "kafka.clientLabel" . }}: "true"
 {{- end }}
-{{- else if contains "NodePort" .Values.service.type }}
-  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "kafka.fullname" . }})
-  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
-  echo http://$NODE_IP:$NODE_PORT
-{{- else if contains "LoadBalancer" .Values.service.type }}
-     NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-           You can watch its status by running 'kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "kafka.fullname" . }}'
-  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "kafka.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
-  echo http://$SERVICE_IP:{{ .Values.service.port }}
-{{- else if contains "ClusterIP" .Values.service.type }}
-  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "kafka.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
-  export CONTAINER_PORT=$(kubectl get pod --namespace {{ .Release.Namespace }} $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
-  echo "Visit http://127.0.0.1:8080 to use your application"
-  kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:$CONTAINER_PORT
+{{- if .Values.externalAccess.enabled }}
+
+External access ({{ .Values.externalAccess.service.type }}):
+{{- range $i := until (int .Values.replicaCount) }}
+  broker {{ $i }}: {{ $.Values.externalAccess.host }}:{{ add (int $.Values.externalAccess.basePort) $i }}
+{{- end }}
+{{- if eq .Values.externalAccess.service.type "ClusterIP" }}
+  Forward each broker's port, e.g.:
+    kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "kafka.fullname" . }}-external-0 {{ .Values.externalAccess.basePort }}:{{ .Values.externalAccess.basePort }}
+{{- end }}
+{{- end }}
+
+Create a topic (auto-creation is {{ if eq (toString (index .Values.config "auto.create.topics.enable")) "false" }}OFF{{ else }}on{{ end }}):
+  kubectl -n {{ .Release.Namespace }} exec {{ include "kafka.fullname" . }}-0 -- env KAFKA_HEAP_OPTS=-Xmx128m \
+    /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:{{ .Values.listeners.client.port }} \
+    --create --topic <name>
+  or list it under `topics` in your values.
+{{- if and (not .Values.clusterId) (not .Values.existingSecret) }}
+
+WARNING: the KRaft cluster id was generated and is kept only through a live
+Secret lookup. Pin it now, especially if you deploy with `helm template` or
+Argo CD, where the lookup does not run:
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "kafka.fullname" . }} -o jsonpath='{.data.cluster-id}' | base64 -d
+Then set it as `clusterId` in your values.
+{{- end }}
+{{- if .Values.ui.enabled }}
+
+Kafka UI ({{ if .Values.ui.readOnly }}read-only{{ else }}READ-WRITE{{ end }}):
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "kafka.uiName" . }} 8085:{{ .Values.ui.service.port }}
+  open http://localhost:8085
+{{- if .Values.ui.ingress.enabled }}
+  or http{{ if .Values.ui.ingress.certIssuer }}s{{ end }}://{{ .Values.ui.ingress.hostname }}{{ .Values.ui.ingress.path }}
+{{- end }}
+{{- if .Values.ui.auth.enabled }}
+  user:     {{ .Values.ui.auth.username }}
+  password: kubectl -n {{ .Release.Namespace }} get secret {{ include "kafka.ui.secretName" . }} -o jsonpath='{.data.{{ ternary .Values.ui.auth.existingSecretPasswordKey "password" (not (empty .Values.ui.auth.existingSecret)) }}}' | base64 -d
+{{- else }}
+  WARNING: UI auth is disabled. Anyone who can reach it can read every message.
+{{- end }}
 {{- end }}

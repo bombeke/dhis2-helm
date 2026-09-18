@@ -1,15 +1,43 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: "{{ include "kafka.fullname" . }}-test-connection"
+  name: {{ printf "%s-test-connection" (include "kafka.fullname" .) | trunc 63 | trimSuffix "-" }}
   labels:
-    {{- include "kafka.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ include "kafka.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: test
+    {{ include "kafka.clientLabel" . }}: "true"
   annotations:
-    "helm.sh/hook": test
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 spec:
-  containers:
-    - name: wget
-      image: busybox
-      command: ['wget']
-      args: ['{{ include "kafka.fullname" . }}:{{ .Values.kafka.service.port }}']
   restartPolicy: Never
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  securityContext:
+    {{- toYaml .Values.podSecurityContext | nindent 4 }}
+  containers:
+    - name: api-versions
+      image: {{ include "kafka.image" . }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      env:
+        - name: KAFKA_HEAP_OPTS
+          value: "-Xmx128m"
+        - name: LOG_DIR
+          value: /tmp
+      # Bootstraps through the Service, then talks to every broker at its
+      # advertised address. This checks advertised.listeners as well as
+      # reachability.
+      command:
+        - /opt/kafka/bin/kafka-broker-api-versions.sh
+        - --bootstrap-server
+        - {{ include "kafka.bootstrapServers" . }}
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+  volumes:
+    - name: tmp
+      emptyDir:
+        sizeLimit: 64Mi
