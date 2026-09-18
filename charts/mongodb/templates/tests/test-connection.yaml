@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "mongodb.fullname" . }}-test-connection
+  labels:
+    {{- include "mongodb.labels" . | nindent 4 }}
+    # Lets the pod through the NetworkPolicy when allowExternal is false.
+    {{ include "mongodb.clientLabel" . }}: "true"
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    {{- toYaml .Values.podSecurityContext | nindent 4 }}
+  containers:
+    - name: mongosh
+      image: {{ include "mongodb.image" . }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      # Log in as root through the Service and list the databases. This
+      # checks the network path, the Service and the root credentials.
+      command:
+        - /bin/bash
+        - -ec
+        - |
+          mongosh --quiet --norc \
+            --host {{ include "mongodb.fullname" . }} --port {{ .Values.service.port }} \
+            --username "$ROOT_USERNAME" --password "$(cat /etc/mongodb/secrets/root-password)" \
+            --authenticationDatabase admin \
+            --eval 'db.adminCommand({ listDatabases: 1, nameOnly: true }).databases.forEach(d => print(d.name))'
+      env:
+        - name: ROOT_USERNAME
+          value: {{ .Values.auth.rootUsername | quote }}
+        - name: HOME
+          value: /tmp
+      volumeMounts:
+        - name: secrets
+          mountPath: /etc/mongodb/secrets
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+  volumes:
+    - name: secrets
+      secret:
+        secretName: {{ include "mongodb.secretName" . }}
+        defaultMode: 0440
+    - name: tmp
+      emptyDir:
+        sizeLimit: 64Mi

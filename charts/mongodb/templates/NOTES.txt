@@ -1,0 +1,33 @@
+MongoDB {{ .Chart.AppVersion }} (standalone) is starting.
+
+In-cluster address:
+  {{ include "mongodb.host" . }}
+
+Root user "{{ .Values.auth.rootUsername }}". Get the password with:
+  kubectl get secret --namespace {{ .Release.Namespace }} {{ include "mongodb.secretName" . }} \
+    -o jsonpath='{.data.root-password}' | base64 -d
+{{- if .Values.auth.username }}
+
+Application user "{{ .Values.auth.username }}" (readWrite on "{{ .Values.auth.database }}").
+{{- if not .Values.auth.existingSecret }}
+Connection string, for apps to read from the Secret:
+  secretKeyRef: { name: {{ include "mongodb.secretName" . }}, key: uri }
+{{- end }}
+{{- end }}
+
+Connect from your machine:
+  kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "mongodb.fullname" . }} 27017:{{ .Values.service.port }}
+  mongosh "mongodb://{{ .Values.auth.rootUsername }}@localhost:27017/?authSource=admin"
+{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.allowExternal) }}
+
+The NetworkPolicy only lets labelled pods connect. Add this label to client
+pods:
+  {{ include "mongodb.clientLabel" . }}: "true"
+{{- end }}
+
+Users are created on the FIRST start only. Changing passwords in values or
+in the Secret later does not change them in the database.
+{{- if not .Values.persistence.enabled }}
+
+WARNING: persistence is disabled. Data is lost when the pod is deleted.
+{{- end }}

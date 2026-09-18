@@ -1,0 +1,181 @@
+# -----------------------------------------------------------------------------
+# MongoDB: a standalone server on the official mongodb-community-server image.
+# -----------------------------------------------------------------------------
+#
+# This is the Kubernetes version of:
+#   podman run -d --name mongodb -p 27017:27017 -v /data/mongodb:/data/db \
+#     -e MONGO_INITDB_ROOT_USERNAME=admin -e MONGO_INITDB_ROOT_PASSWORD=... \
+#     docker.io/mongodb/mongodb-community-server:8.3-ubi8-slim
+#
+# Where settings live:
+#   ConfigMap  mongod.conf, the mongosh config and the first-start init scripts.
+#   Secret     the root password and the application user's password. They
+#              are mounted as files, never set as env vars, so they do not
+#              show up in `kubectl describe pod` or the process environment.
+#   Volume     /data/db on a PersistentVolumeClaim (the podman -v mount).
+#              /tmp and /data/configdb are emptyDirs, because the root
+#              filesystem is read-only.
+#
+# The server runs as a single standalone node. The pod count is fixed at 1:
+# more pods would each be a separate server with its own data, not replicas.
+#
+# NOTE: MongoDB 8.3 will not start on Linux kernel 6.19 or newer
+# (SERVER-121912). Check your nodes' kernel (`kubectl get nodes -o wide`).
+
+nameOverride: ""
+fullnameOverride: ""
+clusterDomain: cluster.local
+
+commonLabels: {}
+commonAnnotations: {}
+
+image:
+  registry: docker.io
+  repository: mongodb/mongodb-community-server
+  tag: "8.3-ubi8-slim"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+containerPort: 27017
+
+auth:
+  # The root user is created once, on the first start with an empty data
+  # directory. Later changes to the name or password here do NOT change the
+  # user in the database. Change it with mongosh (db.changeUserPassword) and
+  # then update the Secret to match.
+  rootUsername: admin
+  # Leave empty to generate a random password on install. Upgrades keep it
+  # by looking up the live Secret. `helm template` (e.g. Argo CD) cannot do
+  # that lookup, so GitOps installs MUST set rootPassword or existingSecret.
+  rootPassword: ""
+
+  # An application user with readWrite on `database`. Applications should use
+  # this user rather than root. Like the root user, it is created only on the
+  # first start. Leave username empty to skip it.
+  database: ""
+  username: ""
+  password: ""       # generated if empty, as for rootPassword
+
+  # Use your own Secret instead of the chart's. It must have the key
+  # `root-password`, and `password` when auth.username is set.
+  existingSecret: ""
+
+# Extra mongod.conf settings, merged over the chart's (net.port,
+# net.bindIpAll, storage.dbPath, security.authorization). A key set here wins.
+# Reference: https://www.mongodb.com/docs/manual/reference/configuration-options/
+config: {}
+#  storage:
+#    wiredTiger:
+#      engineConfig:
+#        cacheSizeGB: 0.5
+#  operationProfiling:
+#    mode: slowOp
+#    slowOpThresholdMs: 200
+
+# Extra first-start scripts for /docker-entrypoint-initdb.d, keyed by file
+# name. They run once, after the root user is created, in file-name order.
+# The chart's own app-user script is 00-app-user.js.
+initScripts: {}
+#  10-indexes.js: |
+#    db.getSiblingDB("app").items.createIndex({ createdAt: 1 });
+
+# Extra container env vars, as a list of EnvVar objects.
+extraEnv: []
+
+service:
+  # ClusterIP for in-cluster clients. NodePort matches `-p 27017:27017` on
+  # every node (set nodePort, e.g. 30017).
+  type: ClusterIP
+  port: 27017
+  nodePort: ""
+  annotations: {}
+
+persistence:
+  enabled: true
+  # Bind to a PVC you created yourself, e.g. one backed by a hostPath or
+  # local PersistentVolume at /data/mongodb. If empty, the StatefulSet
+  # creates one.
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+  annotations: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+# The image runs as mongod (1000:1000).
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+# The root filesystem is read-only. mongod writes to /data/db, and the
+# entrypoint writes a temporary config to /tmp. The chart mounts a volume on
+# each.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# mongod sizes its WiredTiger cache from the container memory limit
+# (50% of limit - 1GB, minimum 256MB), so always set a memory limit.
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 2Gi
+
+# Startup and readiness run `db.adminCommand({ping: 1})` in mongosh, which
+# passes only once mongod accepts commands.
+startupProbe:
+  enabled: true
+  periodSeconds: 10
+  timeoutSeconds: 10
+  # Up to 5 minutes for first-start init or journal recovery.
+  failureThreshold: 30
+readinessProbe:
+  enabled: true
+  periodSeconds: 15
+  timeoutSeconds: 10
+  failureThreshold: 3
+# Liveness uses a TCP check. Starting mongosh (a Node.js process) every few
+# seconds costs more than the answer is worth.
+livenessProbe:
+  enabled: true
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 6
+
+# mongod flushes and closes its data files on SIGTERM. Give it time.
+terminationGracePeriodSeconds: 60
+
+priorityClassName: ""
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+networkPolicy:
+  enabled: true
+  #   true  - any pod can connect to MongoDB.
+  #   false - only pods labelled `<fullname>-client: "true"` (in any
+  #           namespace), plus the peers in extraFrom, can connect.
+  allowExternal: true
+  # Extra NetworkPolicyPeer entries.
+  extraFrom: []
+  #  - namespaceSelector:
+  #      matchLabels:
+  #        kubernetes.io/metadata.name: byod

@@ -1,0 +1,24 @@
+annotations:
+  category: Database
+  licenses: SSPL-1.0
+  images: |
+    - name: mongodb
+      image: docker.io/mongodb/mongodb-community-server:8.3-ubi8-slim
+
+apiVersion: v2
+name: mongodb
+description: >-
+  Standalone MongoDB Community Server on the official
+  mongodb/mongodb-community-server image, with authentication on and
+  persistent storage.
+type: application
+keywords:
+  - mongodb
+  - database
+  - nosql
+
+# Replaces the byod chart and its Bitnami mongodb, clickhouse and ollama
+# dependencies. It is not an in-place upgrade: resource names and the data
+# volume layout change.
+version: 0.1.0
+appVersion: "8.3"
