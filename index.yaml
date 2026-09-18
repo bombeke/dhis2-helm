@@ -4553,6 +4553,29 @@ entries:
   - annotations:
       category: Infrastructure
       images: |
+        - name: kafka
+          image: docker.io/apache/kafka:4.3.1
+        - name: kafka-ui
+          image: docker.io/kafbat/kafka-ui:v1.5.0
+      licenses: Apache-2.0
+    apiVersion: v2
+    appVersion: 4.3.1
+    created: "2026-09-18T14:58:08.712602716Z"
+    description: Apache Kafka in KRaft mode (no ZooKeeper) on the official apache/kafka
+      image, with an optional read-only kafbat/kafka-ui.
+    digest: 6fa118005d97c9f502adc6a5e99516fe552beb211b523b6fc222e343f3e14b49
+    keywords:
+    - kafka
+    - kraft
+    - kafka-ui
+    name: kafka
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/kafka-0.2.0/kafka-0.2.0.tgz
+    version: 0.2.0
+  - annotations:
+      category: Infrastructure
+      images: |
         - name: jmx-exporter
           image: docker.io/bitnami/jmx-exporter:1.0.1-debian-12-r9
         - name: kafka
@@ -5125,4 +5148,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2026-04-13T15:53:18.822216794Z"
+generated: "2026-09-18T14:58:08.945812373Z"
