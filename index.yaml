@@ -4701,6 +4701,28 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/kafka-0.1.0/kafka-0.1.0.tgz
     version: 0.1.0
+  mongodb:
+  - annotations:
+      category: Database
+      images: |
+        - name: mongodb
+          image: docker.io/mongodb/mongodb-community-server:8.3-ubi8-slim
+      licenses: SSPL-1.0
+    apiVersion: v2
+    appVersion: "8.3"
+    created: "2026-09-18T22:12:36.623306459Z"
+    description: Standalone MongoDB Community Server on the official mongodb/mongodb-community-server
+      image, with authentication on and persistent storage.
+    digest: 5e96eb4c1ecec7d8c9505a907fd273843d78614a651cb88bf45099f5febb8ca3
+    keywords:
+    - mongodb
+    - database
+    - nosql
+    name: mongodb
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/mongodb-0.1.0/mongodb-0.1.0.tgz
+    version: 0.1.0
   smartai:
   - apiVersion: v2
     appVersion: 1.17.0
@@ -5148,4 +5170,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2026-09-18T14:58:08.945812373Z"
+generated: "2026-09-18T22:12:36.785902939Z"
