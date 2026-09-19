@@ -1,22 +1,92 @@
-1. Get the application URL by running these commands:
-{{- if .Values.ingress.enabled }}
-{{- range $host := .Values.ingress.hosts }}
-  {{- range .paths }}
-  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
-  {{- end }}
+Superset {{ .Chart.AppVersion }} is starting: web{{ if .Values.worker.enabled }}, worker{{ end }}{{ if include "dashboard.beatEnabled" . }}, beat{{ end }}{{ if .Values.init.enabled }}, and the init Job that migrates the metastore{{ end }}.
+{{- if .Values.init.enabled }}
+
+Web and worker pods stay in Init until the init Job has brought the metastore
+schema to this image's head. Follow it with:
+  kubectl logs --namespace {{ .Release.Namespace }} -f job/{{ printf "%s-init-%d" (include "dashboard.fullname" .) (int .Release.Revision) | trunc 63 | trimSuffix "-" }}
 {{- end }}
-{{- else if contains "NodePort" .Values.service.type }}
-  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "dashboard.fullname" . }})
-  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
-  echo http://$NODE_IP:$NODE_PORT
-{{- else if contains "LoadBalancer" .Values.service.type }}
-     NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-           You can watch its status by running 'kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "dashboard.fullname" . }}'
-  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "dashboard.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
-  echo http://$SERVICE_IP:{{ .Values.service.port }}
-{{- else if contains "ClusterIP" .Values.service.type }}
-  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "dashboard.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
-  export CONTAINER_PORT=$(kubectl get pod --namespace {{ .Release.Namespace }} $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
-  echo "Visit http://127.0.0.1:8080 to use your application"
-  kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:$CONTAINER_PORT
+
+In-cluster address:
+  http://{{ include "dashboard.serviceHost" . }}:{{ .Values.service.port }}
+{{- if .Values.ingress.enabled }}
+
+Ingress:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- end }}
+
+From your machine:
+  kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "dashboard.fullname" . }} 8088:{{ .Values.service.port }}
+  open http://localhost:8088
+{{- if .Values.admin.create }}
+
+Admin login: {{ .Values.admin.username }}
+  kubectl get secret --namespace {{ .Release.Namespace }} {{ include "dashboard.secretName" . }} \
+    -o jsonpath='{.data.admin-password}' | base64 -d
+{{- end }}
+{{- if not .Values.auth.existingSecret }}
+
+SECRET_KEY encrypts every database password saved in Superset. The Secret
+{{ include "dashboard.fullname" . }} is kept on `helm uninstall` so a reinstall against the same
+metastore can still decrypt them. Back it up with the metastore:
+  kubectl get secret --namespace {{ .Release.Namespace }} {{ include "dashboard.fullname" . }} -o yaml
+{{- end }}
+
+Drivers {{ if include "dashboard.installDrivers" . }}installed at pod start{{ else }}NOT installed by the chart (drivers.install is off){{ end }}:
+{{- range (include "dashboard.requirements" . | trim | splitList "\n") }}
+  {{ . }}
+{{- end }}
+TimescaleDB uses the PostgreSQL connection type:
+  postgresql+psycopg2://user:password@host:5432/database?sslmode=verify-full
+ClickHouse (clickhouse-connect, HTTP interface):
+  clickhousedb://user:password@host:8123/database   (8443 with ?secure=true)
+{{- if .Values.embedding.enabled }}
+
+Embedding is ON for: {{ join ", " .Values.embedding.allowedDomains }}
+Guest users get the role "{{ .Values.embedding.guestRoleName }}". Enable embedding per dashboard
+(Dashboard -> ... -> Embed dashboard), and mint guest tokens from your BACKEND:
+  POST /api/v1/security/guest_token/
+as a service user with "can grant guest token on SecurityRestApi".
+{{- if eq .Values.embedding.guestRoleName "Public" }}
+
+NOTE: guest users get the Public role. Create a dedicated role with access to
+only the embedded dashboards' datasets and set embedding.guestRoleName.
+{{- end }}
+{{- end }}
+{{- if .Values.alerts.enabled }}
+
+Alerts & reports are ON{{ if .Values.alerts.dryRun }} in DRY-RUN mode (nothing is sent){{ end }}.
+{{- if not .Values.alerts.smtp.host }}
+NOTE: alerts.smtp.host is not set, so e-mail notifications cannot be sent.
+{{- end }}
+{{- if not .Values.alerts.screenshots.enabled }}
+Screenshots (PNG/PDF) are off: the lean image has no browser. CSV and text
+reports work; see alerts.screenshots in values.yaml for a screenshot image.
+{{- end }}
+{{- end }}
+{{- if .Values.extensions.enabled }}
+
+Extensions are ON, loaded from {{ include "dashboard.extensionsDir" . }}.
+{{- end }}
+{{- if and .Values.valkey.enabled (not .Values.valkey.auth.enabled) }}
+
+WARNING: valkey.auth.enabled is false. Anything that can reach Valkey can read
+cached query results and inject Celery tasks.
+{{- end }}
+{{- if and (eq .Values.metastore.type "postgresql") (has .Values.metastore.sslMode (list "disable" "allow" "prefer")) (not .Values.metastore.uriSecret.name) }}
+
+NOTE: metastore.sslMode is "{{ .Values.metastore.sslMode }}", which does not require TLS. Use
+verify-full with metastore.tls.existingSecret when the server has a certificate.
+{{- end }}
+{{- if and .Values.networkPolicy.enabled .Values.networkPolicy.restrictEgress (include "dashboard.installDrivers" .) }}
+
+NOTE: egress is restricted and drivers are installed at pod start. Allow the
+package index in networkPolicy.extraEgress, or install-drivers cannot reach it.
+{{- end }}
+{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.allowExternal) }}
+
+The NetworkPolicy only admits the peers in networkPolicy.ingressFrom, this
+release's workers, and pods labelled:
+  {{ include "dashboard.clientLabel" . }}: "true"
 {{- end }}

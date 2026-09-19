@@ -1,0 +1,98 @@
+{{- if .Values.worker.enabled }}
+{{- $fullname := include "dashboard.fullname" . }}
+{{- $component := dict "ctx" . "component" "worker" }}
+{{- $image := include "dashboard.workerImage" . }}
+{{- $app := "superset.tasks.celery_app:app" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-worker
+  labels:
+    {{- include "dashboard.componentLabels" $component | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "dashboard.componentSelectorLabels" $component | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dashboard.componentSelectorLabels" $component | nindent 8 }}
+        {{- include "dashboard.podLabels" . | nindent 8 }}
+        {{- with .Values.worker.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- include "dashboard.checksums" . | nindent 8 }}
+        {{- with .Values.worker.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "dashboard.podSpecCommon" . | nindent 6 }}
+      # Long enough for a running SQL Lab query or report to finish after
+      # SIGTERM; Celery stops taking new tasks at once.
+      terminationGracePeriodSeconds: {{ max 120 (int .Values.terminationGracePeriodSeconds) }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- include "dashboard.initContainers" (dict "ctx" . "image" $image "migrations" true) | nindent 8 }}
+      containers:
+        - name: worker
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command:
+            - celery
+            - --app={{ $app }}
+            - worker
+            - --pool={{ .Values.worker.pool }}
+            - --concurrency={{ .Values.worker.concurrency }}
+            - --max-tasks-per-child={{ .Values.worker.maxTasksPerChild }}
+            - -O
+            - fair
+            - --loglevel={{ .Values.worker.logLevel }}
+            {{- with .Values.worker.queues }}
+            - --queues={{ . }}
+            {{- end }}
+          env:
+            {{- include "dashboard.env" . | nindent 12 }}
+            {{- with .Values.worker.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.worker.livenessProbe.enabled }}
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - celery --app={{ $app }} inspect ping --destination "celery@${HOSTNAME}" --timeout 10
+            initialDelaySeconds: {{ .Values.worker.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.worker.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.worker.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.worker.livenessProbe.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+          volumeMounts:
+            {{- include "dashboard.volumeMounts" . | nindent 12 }}
+            {{- with .Values.worker.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        {{- include "dashboard.volumes" (dict "ctx" .) | nindent 8 }}
+        {{- with .Values.worker.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}

@@ -1,0 +1,47 @@
+{{- include "dashboard.validate" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dashboard.fullname" . }}
+  labels:
+    {{- include "dashboard.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  # Logic only; every value it uses comes from settings.json or a Secret file.
+  superset_config.py: |
+    {{- .Files.Get "files/superset_config.py" | nindent 4 }}
+  settings.json: |
+    {{- include "dashboard.settings" . | nindent 4 }}
+  requirements.txt: |
+    {{- include "dashboard.requirements" . | nindent 4 }}
+  install_drivers.sh: |
+    {{- .Files.Get "files/install_drivers.sh" | nindent 4 }}
+  fetch_extensions.py: |
+    {{- .Files.Get "files/fetch_extensions.py" | nindent 4 }}
+  wait_for_dependencies.py: |
+    {{- .Files.Get "files/wait_for_dependencies.py" | nindent 4 }}
+  init.sh: |
+    {{- .Files.Get "files/init.sh" | nindent 4 }}
+  create_admin.py: |
+    {{- .Files.Get "files/create_admin.py" | nindent 4 }}
+{{- if .Values.configOverrides }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dashboard.fullname" . }}-overrides
+  labels:
+    {{- include "dashboard.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  {{- range $name, $body := .Values.configOverrides }}
+  {{ $name }}.py: |
+    {{- $body | nindent 4 }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,74 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $np := .Values.networkPolicy }}
+{{- $web := dict "ctx" . "component" "web" }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "dashboard.fullname" . }}
+  labels:
+    {{- include "dashboard.componentLabels" $web | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "dashboard.componentSelectorLabels" $web | nindent 6 }}
+  policyTypes:
+    - Ingress
+    {{- if $np.restrictEgress }}
+    - Egress
+    {{- end }}
+  ingress:
+    - ports:
+        - port: http
+          protocol: TCP
+      {{- if not $np.allowExternal }}
+      from:
+        # This release's workers: alerts and reports render through the UI.
+        - podSelector:
+            matchLabels:
+              {{- include "dashboard.componentSelectorLabels" (dict "ctx" . "component" "worker") | nindent 14 }}
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              {{ include "dashboard.clientLabel" . }}: "true"
+        {{- with $np.ingressFrom }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+  {{- if $np.restrictEgress }}
+  egress:
+    {{- include "dashboard.egressRules" . | nindent 4 }}
+  {{- end }}
+---
+# Worker, beat and the init Job serve nothing: no inbound traffic at all.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "dashboard.fullname" . }}-no-ingress
+  labels:
+    {{- include "dashboard.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "dashboard.selectorLabels" . | nindent 6 }}
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [worker, beat, init]
+  policyTypes:
+    - Ingress
+    {{- if $np.restrictEgress }}
+    - Egress
+    {{- end }}
+  {{- if $np.restrictEgress }}
+  egress:
+    {{- include "dashboard.egressRules" . | nindent 4 }}
+  {{- end }}
+{{- end }}

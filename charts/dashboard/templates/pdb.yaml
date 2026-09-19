@@ -1,0 +1,40 @@
+{{- $web := or .Values.web.autoscaling.enabled (gt (int .Values.web.replicaCount) 1) }}
+{{- if and .Values.web.podDisruptionBudget.enabled $web }}
+{{- $component := dict "ctx" . "component" "web" }}
+# Only with more than one replica. On one, maxUnavailable: 1 permits exactly the
+# eviction it was meant to guard and minAvailable: 1 blocks every node drain.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "dashboard.fullname" . }}
+  labels:
+    {{- include "dashboard.componentLabels" $component | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  maxUnavailable: {{ .Values.web.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "dashboard.componentSelectorLabels" $component | nindent 6 }}
+{{- end }}
+{{- if and .Values.worker.enabled .Values.worker.podDisruptionBudget.enabled (gt (int .Values.worker.replicaCount) 1) }}
+{{- $component := dict "ctx" . "component" "worker" }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "dashboard.fullname" . }}-worker
+  labels:
+    {{- include "dashboard.componentLabels" $component | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  maxUnavailable: {{ .Values.worker.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "dashboard.componentSelectorLabels" $component | nindent 6 }}
+{{- end }}

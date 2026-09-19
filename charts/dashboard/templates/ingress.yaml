@@ -1,65 +1,41 @@
-{{- if and .Values.ingress.enabled .Values.enabled -}}
-{{- $fullName := include "dashboard.fullname" . -}}
-{{- $svcPort := .Values.service.port -}}
-{{- $tls := hasKey .Values.ingress "certIssuer" -}}
+{{- if .Values.ingress.enabled }}
+{{- $fullname := include "dashboard.fullname" . }}
+{{- $port := .Values.service.port }}
+{{- $annotations := merge (deepCopy .Values.ingress.annotations) .Values.commonAnnotations }}
+{{- with .Values.ingress.certIssuer }}
+{{- $_ := set $annotations "cert-manager.io/cluster-issuer" . }}
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ $fullName }}
+  name: {{ $fullname }}
   labels:
-    {{- include "dashboard.labels" . | nindent 4 }}
+    {{- include "dashboard.componentLabels" (dict "ctx" . "component" "web") | nindent 4 }}
+  {{- with $annotations }}
   annotations:
-  {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- if $tls }}
-    cert-manager.io/cluster-issuer: {{ .Values.ingress.certIssuer | quote }}
-    ingress.kubernetes.io/ssl-redirect: "true"
-  {{- end }}
 spec:
-  {{- if $tls }}
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
   tls:
-    - secretName: {{ .Values.ingress.hostname | replace "." "-" }}-tls
-      hosts:
-        - {{ .Values.ingress.hostname | quote }}
+    {{- toYaml . | nindent 4 }}
   {{- end }}
   rules:
-    - host: {{ .Values.ingress.hostname | quote }}
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
       http:
         paths:
-          - path: {{ .Values.ingress.path }}
-            pathType: ImplementationSpecific
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ $fullName }}
+                name: {{ $fullname }}
                 port:
-                  number: {{ $svcPort }}
-{{- end }}
-
----
-{{- if .Values.enabled }}
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: {{ include "dashboard.fullname" . }}-cors-middleware
-  labels:
-    {{- include "dashboard.labels" . | nindent 4 }}
-spec:
-  headers:
-    {{- with .Values.extramiddleware.middleware.headers }}
-    {{- toYaml . | nindent 6 }}
+                  number: {{ $port }}
+          {{- end }}
     {{- end }}
-{{- end }}
----
-{{- if .Values.enabled }}
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: {{ include "dashboard.fullname" . }}-redirect-https-middleware
-  labels:
-    {{- include "dashboard.labels" . | nindent 4 }}
-spec:
-  redirectScheme:
-    scheme: https
-    permanent: true
 {{- end }}

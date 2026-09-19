@@ -1,0 +1,136 @@
+{{- $fullname := include "dashboard.fullname" . }}
+{{- $component := dict "ctx" . "component" "web" }}
+{{- $g := .Values.web.gunicorn }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "dashboard.componentLabels" $component | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if not .Values.web.autoscaling.enabled }}
+  replicas: {{ .Values.web.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # A new pod waits in Init until the schema is migrated; keep the old
+      # ones serving until then.
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "dashboard.componentSelectorLabels" $component | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dashboard.componentSelectorLabels" $component | nindent 8 }}
+        {{- include "dashboard.podLabels" . | nindent 8 }}
+        {{- with .Values.web.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- include "dashboard.checksums" . | nindent 8 }}
+        {{- with .Values.web.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "dashboard.podSpecCommon" . | nindent 6 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- include "dashboard.initContainers" (dict "ctx" . "image" (include "dashboard.image" .) "migrations" true) | nindent 8 }}
+      containers:
+        - name: superset
+          image: {{ include "dashboard.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          # The image's own gunicorn launcher, tuned through its environment.
+          command: ["/app/docker/entrypoints/run-server.sh"]
+          env:
+            {{- include "dashboard.env" . | nindent 12 }}
+            - name: SUPERSET_BIND_ADDRESS
+              value: "0.0.0.0"
+            - name: SUPERSET_PORT
+              value: {{ .Values.service.port | quote }}
+            - name: SERVER_WORKER_AMOUNT
+              value: {{ $g.workers | quote }}
+            - name: SERVER_THREADS_AMOUNT
+              value: {{ $g.threads | quote }}
+            - name: SERVER_WORKER_CLASS
+              value: {{ $g.workerClass | quote }}
+            - name: GUNICORN_TIMEOUT
+              value: {{ $g.timeout | quote }}
+            - name: GUNICORN_KEEPALIVE
+              value: {{ $g.keepAlive | quote }}
+            - name: WORKER_MAX_REQUESTS
+              value: {{ $g.maxRequests | quote }}
+            - name: WORKER_MAX_REQUESTS_JITTER
+              value: {{ $g.maxRequestsJitter | quote }}
+            - name: SERVER_LIMIT_REQUEST_LINE
+              value: {{ $g.limitRequestLine | quote }}
+            - name: SERVER_LIMIT_REQUEST_FIELD_SIZE
+              value: {{ $g.limitRequestFieldSize | quote }}
+            - name: GUNICORN_LOGLEVEL
+              value: {{ $g.logLevel | quote }}
+            {{- with .Values.web.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          # /health is unauthenticated and does not touch the metastore, so it
+          # measures "gunicorn is serving", which is what these should mean.
+          {{- if .Values.web.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: {{ .Values.web.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.web.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.web.startupProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.web.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: {{ .Values.web.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.web.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.web.readinessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.web.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: {{ .Values.web.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.web.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.web.livenessProbe.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+          volumeMounts:
+            {{- include "dashboard.volumeMounts" . | nindent 12 }}
+            {{- with .Values.web.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        {{- include "dashboard.volumes" (dict "ctx" .) | nindent 8 }}
+        {{- with .Values.web.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}

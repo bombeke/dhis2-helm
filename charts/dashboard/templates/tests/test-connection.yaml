@@ -1,14 +1,56 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: "{{ include "dashboard.fullname" . }}-test-connection"
+  name: {{ include "dashboard.fullname" . }}-test-connection
   labels:
     {{- include "dashboard.labels" . | nindent 4 }}
+    # Lets the pod through the NetworkPolicy when allowExternal is false.
+    {{ include "dashboard.clientLabel" . }}: "true"
   annotations:
     "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
-  containers:
-    - name: wget
-      image: busybox
-      command: ['/bin/bash', '-c', 'echo "Installed Dashboard successfully."']
   restartPolicy: Never
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  securityContext:
+    {{- toYaml .Values.podSecurityContext | nindent 4 }}
+  containers:
+    - name: check
+      # The Superset image, for its Python; nothing of Superset is imported.
+      image: {{ include "dashboard.image" . }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      env:
+        - name: BASE_URL
+          value: http://{{ include "dashboard.serviceHost" . }}:{{ .Values.service.port }}
+        - name: EXPECT_CSP
+          value: {{ .Values.security.talisman.enabled | quote }}
+        - name: PYTHONDONTWRITEBYTECODE
+          value: "1"
+      command:
+        - python
+        - -c
+        - |
+          import os, sys, urllib.request
+          base = os.environ["BASE_URL"]
+
+          with urllib.request.urlopen(f"{base}/health", timeout=10) as r:
+              body = r.read().decode()
+              print(f"GET /health -> {r.status} {body!r}")
+              if r.status != 200 or body.strip() != "OK":
+                  sys.exit("health check failed")
+
+          # The login page proves the app, the metastore and the session
+          # layer work end to end, and carries the security headers.
+          with urllib.request.urlopen(f"{base}/login/", timeout=30) as r:
+              print(f"GET /login/ -> {r.status}")
+              if r.status != 200:
+                  sys.exit("login page failed")
+              if os.environ["EXPECT_CSP"] == "true":
+                  csp = r.headers.get("Content-Security-Policy", "")
+                  if "frame-ancestors" not in csp:
+                      sys.exit(f"CSP missing or incomplete: {csp!r}")
+                  print("Content-Security-Policy present")
+          print("ok")

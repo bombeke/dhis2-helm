@@ -1,381 +1,728 @@
-# Beyond Data Analytics  Dashboards
+# -----------------------------------------------------------------------------
+# Apache Superset 6 — dashboards, SQL Lab, alerts & reports, embedding.
+# -----------------------------------------------------------------------------
+#
+# The upstream `lean` image, unmodified. It ships NO database drivers — not even
+# psycopg2 for its own metastore — so this chart installs them at pod start,
+# into a volume, as the unprivileged image user (see `drivers`). Nothing is
+# ever written into the image's filesystem: the root filesystem is read-only in
+# every container.
+#
+# Where settings live:
+#   ConfigMap  superset_config.py (logic only), settings.json (everything this
+#              file configures, as data), requirements.txt, the helper scripts
+#              and `configOverrides`. Nothing secret.
+#   Secret     SECRET_KEY, the admin password, the guest-token and async-query
+#              JWT secrets, and any password you set inline below. Mounted as
+#              FILES under /etc/superset/secrets and read by superset_config.py
+#              — no secret is an environment variable, so none shows up in
+#              `kubectl describe pod` or /proc/<pid>/environ.
+#   Volumes    /opt/superset/drivers (the drivers), /opt/superset/extensions
+#              (.supx bundles), /app/superset_home and /tmp — all emptyDirs.
+#
+# Components:
+#   web     gunicorn serving the UI and API.
+#   worker  Celery: async SQL Lab, alerts & reports, thumbnails, cache warm-up.
+#   beat    Celery beat: the alerts & reports scheduler. Exactly one replica.
+#   init    A Job per install/upgrade: `superset db upgrade`, `superset init`,
+#           and the admin user. Every other pod waits in an init container
+#           until the metastore schema is at the image's migration head, so a
+#           new image never serves against an old schema.
 
-enabled:  false
-# This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
-replicaCount: 1
-
-# This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
-image:
-  repository: drupal
-  # This sets the pull policy for images.
-  pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: "php8.4-apache"
-
-# This is for the secretes for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
-imagePullSecrets: []
-# This is to override the chart name.
 nameOverride: ""
 fullnameOverride: ""
+clusterDomain: cluster.local
 
-#This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
-serviceAccount:
-  # Specifies whether a service account should be created
+commonLabels: {}
+commonAnnotations: {}
+
+# The one image for web, worker, beat, the init Job and every init container.
+# Pin the tag: the metastore schema is migrated forward by the init Job and
+# Superset does not support running an older image against a newer schema.
+image:
+  registry: docker.io
+  repository: apache/superset
+  tag: "6.1.0"
+  # Optional. When set, the image is pulled by digest and the tag is only a
+  # label for humans.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# -----------------------------------------------------------------------------
+# Secrets owned by the chart.
+# -----------------------------------------------------------------------------
+auth:
+  # Leave any of these empty to generate a random value on install. Upgrades
+  # keep them by looking up the live Secret; `helm template` (e.g. Argo CD)
+  # cannot do that lookup, so GitOps installs MUST set them or existingSecret.
+  #
+  # SECRET_KEY signs sessions AND encrypts every database password Superset
+  # stores in the metastore. Lose it and every saved connection has to be
+  # re-entered. The chart's Secret carries `helm.sh/resource-policy: keep` for
+  # exactly this reason. To rotate it, set previousSecretKey to the old value,
+  # upgrade, run `superset re-encrypt-secrets` in a web pod, then clear it.
+  secretKey: ""
+  previousSecretKey: ""
+  # Signs the guest tokens your backend mints for embedded dashboards.
+  guestTokenJwtSecret: ""
+  # Signs the async-query JWT cookie (GLOBAL_ASYNC_QUERIES). At least 32 bytes.
+  asyncQueriesJwtSecret: ""
+
+  # Your own Secret instead of the chart's. It must contain the keys
+  # `secret-key`, `admin-password`, `guest-token-jwt-secret` and
+  # `async-queries-jwt-secret`, and may contain `previous-secret-key`.
+  existingSecret: ""
+
+# Created (never modified) by the init Job. Set create: false once you have
+# real users, or when authentication is delegated (OAuth/LDAP via
+# configOverrides).
+admin:
   create: true
-  # Automatically mount a ServiceAccount's API credentials?
-  automount: true
-  # Annotations to add to the service account
-  annotations: {}
-  # The name of the service account to use.
-  # If not set and create is true, a name is generated using the fullname template
-  name: ""
+  username: admin
+  firstName: Superset
+  lastName: Admin
+  email: admin@example.org
+  # Generated if empty, as above. Read it back with the command in NOTES.txt.
+  password: ""
+  # When true, an existing admin's password is reset to the value above on
+  # every upgrade. Off by default: a password changed in the UI should not be
+  # silently reverted by a `helm upgrade`.
+  resetPasswordOnUpgrade: false
 
-# This is for setting Kubernetes Annotations to a Pod.
-# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/ 
-podAnnotations: {}
-# This is for setting Kubernetes Labels to a Pod.
-# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
+# -----------------------------------------------------------------------------
+# Metastore: where Superset keeps dashboards, charts, users and saved queries.
+# -----------------------------------------------------------------------------
+#
+# An EXTERNAL database — this chart does not run one. PostgreSQL is the tested
+# path; the timescaledb chart in this repository works as-is:
+#
+#   metastore:
+#     host: timescaledb.data.svc.cluster.local
+#     uriSecret:            # the timescaledb chart's ready-made DSN
+#       name: timescaledb
+#       key: uri
+#
+# The database and role must exist before install; the init Job only creates
+# Superset's tables inside it. Give the role ownership of the database and
+# nothing more — it never needs superuser.
+metastore:
+  # postgresql or mysql. Selects the SQLAlchemy driver and the default port.
+  type: postgresql
+  host: ""
+  port: ""                       # 5432 / 3306 when empty
+  database: superset
+  username: superset
 
-podSecurityContext: {}
-  # fsGroup: 2000
+  # One of, in order of precedence:
+  #   uriSecret       a complete SQLAlchemy URI in a Secret. Wins over
+  #                   everything else here except `engineOptions`.
+  #   existingSecret  the password in a Secret of yours.
+  #   password        inline; the chart stores it in its own Secret.
+  uriSecret:
+    name: ""
+    key: uri
+  existingSecret: ""
+  existingSecretPasswordKey: password
+  password: ""
 
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+  # PostgreSQL sslmode: disable, allow, prefer, require, verify-ca,
+  # verify-full. `prefer` falls back to plaintext silently; use verify-full
+  # whenever the server has a certificate — which the timescaledb chart does
+  # when its tls.enabled is on.
+  sslMode: prefer
+  tls:
+    # A Secret with the CA (and optionally a client certificate and key, for
+    # cert authentication). Mounted read-only; key file mode 0440 satisfies
+    # libpq's permission check.
+    existingSecret: ""
+    caKey: ca.crt
+    certKey: ""                  # e.g. tls.crt, for client-certificate auth
+    keyKey: ""                   # e.g. tls.key
 
-# This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
-service:
-  # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
-  type: ClusterIP
-  # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
-  port: 80
+  # Extra URL query parameters, e.g. {application_name: superset}.
+  query: {}
 
-# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
-ingress:
-  enabled: false
-  certIssuer: le-staging
-  hostname: "drupal.default.svc.cluster.local"
-  path: /
-  annotations:
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
-    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  # SQLALCHEMY_ENGINE_OPTIONS for the metastore connection pool, per process.
+  # Total connections = (web replicas x gunicorn workers + worker replicas x
+  # concurrency + beat) x (pool_size + max_overflow). Keep that under the
+  # server's max_connections with room to spare.
+  engineOptions:
+    pool_size: 5
+    max_overflow: 10
+    pool_recycle: 1800
+    pool_pre_ping: true
 
-resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
-
-# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-livenessProbe:
-  eanbled: false
-  httpGet:
-    path: /user/login
-    port: http
-readinessProbe:
-  enabled: false
-  httpGet:
-    path: /user/login
-    port: http
-
-#This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 100
-  targetCPUUtilizationPercentage: 80
-  # targetMemoryUtilizationPercentage: 80
-
-drupal:
-  # These will be passed as environment variables to the container
-  # It's better to handle sensitive data like secrets via a separate 'secrets.yaml' or Kubernetes Secrets
-  # kubectl create secret generic drupal-db-secret --from-literal=database-password='xxxxx'
-
-  DRUPAL_DATABASE_HOST: "superset1-postgresql-0.default.svc.cluster.local"
-  DRUPAL_DATABASE_NAME: "drupal"
-  DRUPAL_DATABASE_USER: "drupal"
-
-persistence:
-  enabled: true
-  accessMode: ReadWriteOnce
-  size: 10Gi
-  mountPath: /var/www/html
-
-# Additional volumes on the output Deployment definition.
-volumes: []
-# - name: foo
-#   secret:
-#     secretName: mysecret
-#     optional: false
-
-# Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
-# - name: foo
-#   mountPath: "/etc/foo"
-#   readOnly: true
-
-nodeSelector: {}
-
-tolerations: []
-
-affinity: {}
-
-extramiddleware:
-  middleware:
-    headers:
-      accessControlAllowHeaders: 
-        - "*"
-pgVersion: "17"
-pgMinorVersion: "17.6"
-profile: "development"
-credentials: {}
-  # This is for setting up the credentials more information can be found here: https://github.com/stackgres/stackgres-operator/blob/main/docs/credentials.md
-  #   users:
-  #     superuser:
-  #       username:
-  #         name:
-  #         key:
-  #       password:
-  #         name:
-  #         key:
-  #     replication:
-  #       username:
-  #         name:
-  #         key:
-  #       password:
-  #         name:
-  #         key:
-  #     authenticator:
-  #       username:
-  #         name:
-  #         key:
-  #       password:
-  #         name:
-  #         key:
-cluster:
-  minorVersionUpgrade:
-    enabled: false
-  securityUpgrade:
-    enabled: false
-  configurations: {}
-
-  managedSql:
-    enabled: true
-  #  continueOnSGScriptError:
-  #  continueOnError:
-  #  scripts:
-  #  - name: create-stackgres-user
-  #    scriptFrom:
-  #      secretKeyRef: # read the user from a Secret to maintain credentials in a safe place
-  #        name: stackgres-secret-sqls-scripts
-  #        key: create-stackgres-user.sql
-  #  - name: create-stackgres-database
-  #    script: |
-  #      CREATE DATABASE stackgres WITH OWNER stackgres;
-  #  - name: create-stackgres-schema
-  #    database: stackgres
-  #    scriptFrom:
-  #      configMapKeyRef: # read long script from a ConfigMap to avoid have to much data in the helm releasea and the sgcluster CR
-  #        name: stackgres-sqls-scripts
-  #        key: create-stackgres-schema.sql
-# StackGres Operator
-stackgresOperator:
-  enabled: true
-
-# Custom Cache Valkey
+# -----------------------------------------------------------------------------
+# Valkey: cache, results backend, rate limiting and the Celery broker.
+# -----------------------------------------------------------------------------
+#
+# The bundled subchart (https://valkey.io/valkey-helm). ACL authentication is
+# ON: the password is generated into the Secret `<release>-dashboard-valkey`,
+# which both this chart and the subchart read. The subchart's NetworkPolicy
+# admits only pods labelled `dashboard-valkey-client: "true"`, which every
+# Superset pod carries.
+#
+# Nothing here is durable by design. Superset's cache and Celery queues are
+# rebuildable; filter state and explore form data stay in the metastore
+# (upstream's SupersetMetastoreCache default) so a Valkey restart never loses
+# anything a user saved.
 valkey:
   enabled: true
   auth:
+    enabled: true
+    # Rendered with `tpl` by the subchart. Must match the chart's naming —
+    # change it only together with valkeyConnection.existingSecret.
+    usersExistingSecret: "{{ .Release.Name }}-dashboard-valkey"
+    aclUsers:
+      default:
+        permissions: "~* &* +@all"
+        passwordKey: valkey-password
+  networkPolicy:
+    ingress:
+      - from:
+          - podSelector:
+              matchLabels:
+                dashboard-valkey-client: "true"
+        ports:
+          - port: 6379
+            protocol: TCP
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+
+# How Superset reaches Valkey (or any Redis-protocol server). With the bundled
+# subchart enabled everything here except the database numbers is derived.
+valkeyConnection:
+  # Required when valkey.enabled is false.
+  host: ""
+  port: 6379
+  username: ""                   # ACL user; empty means `default`
+  # Only for an external server. With the subchart, the generated password is
+  # used unless existingSecret is set.
+  password: ""
+  existingSecret: ""
+  existingSecretPasswordKey: valkey-password
+  tls:
     enabled: false
-# Apache Superset Chart configuration
-superset:
+    # A Secret containing the CA that signed the server certificate.
+    existingSecret: ""
+    caKey: ca.crt
+    # required | optional | none. `none` disables verification; do not.
+    certReqs: required
+  # Separate logical databases, so a FLUSHDB on the cache cannot drop the
+  # Celery queue.
+  databases:
+    celeryBroker: 0
+    celeryResults: 1
+    cache: 2
+    resultsBackend: 3
+    rateLimit: 4
+    asyncQueries: 5
+  keyPrefix: superset_
+
+# -----------------------------------------------------------------------------
+# Database drivers.
+# -----------------------------------------------------------------------------
+#
+# Installed by an init container with `uv` (shipped in the image) into an
+# emptyDir that superset_config.py appends to sys.path:
+#   - constrained to the exact versions already in the image's venv, so a
+#     driver can never drag in a different SQLAlchemy or urllib3;
+#   - wheels only (`--no-build`): nothing is compiled and no package's build
+#     script ever runs inside the pod;
+#   - appended AFTER site-packages, so nothing installed here can shadow the
+#     image's own packages.
+#
+# This needs egress to the package index at every pod start (about 25 MB for
+# the defaults). For air-gapped or strictly locked-down clusters, bake the
+# drivers into your own image and set install: false:
+#
+#   FROM apache/superset:6.1.0
+#   USER root
+#   RUN . /app/.venv/bin/activate && uv pip install psycopg2-binary==2.9.13 \
+#         clickhouse-connect==0.15.1
+#   USER superset
+drivers:
+  install: true
+  packages:
+    # PostgreSQL and TimescaleDB (TimescaleDB is PostgreSQL to a client; use
+    # the "PostgreSQL" connection type). Also the metastore driver when
+    # metastore.type is postgresql, so do not remove it in that case.
+    - psycopg2-binary==2.9.13
+    # ClickHouse over HTTP(S), the driver Superset's ClickHouse engine spec
+    # targets. Superset 6.1 declares clickhouse-connect <1.0.
+    # URI: clickhousedb://user:pass@host:8123/db (8443 with TLS)
+    - clickhouse-connect==0.15.1
+  # Anything else, e.g. "trino==0.336.0" or "duckdb-engine==0.17.0".
+  extraPackages: []
+  # A private mirror, e.g. https://nexus.example.org/repository/pypi/simple.
+  # Credentials belong in indexUrlSecret, not here.
+  indexUrl: ""
+  indexUrlSecret:
+    name: ""
+    key: index-url
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+# -----------------------------------------------------------------------------
+# Extensions (Superset 6 .supx bundles).
+# -----------------------------------------------------------------------------
+#
+# Turns on the ENABLE_EXTENSIONS feature flag and points EXTENSIONS_PATH at a
+# directory an init container fills from:
+#   bundles  downloaded over HTTPS and verified against a REQUIRED sha256 — a
+#            bundle whose hash does not match is refused and the pod does not
+#            start. Extensions run code in the web and worker processes, so an
+#            unverified download is remote code execution by design.
+#   volume   any volume source holding .supx files (a PVC, a ConfigMap for
+#            small bundles, or an OCI image volume on Kubernetes 1.33+),
+#            copied in as-is.
+# Python dependencies of an extension's backend go in pythonPackages and are
+# installed with the drivers, under the same constraints.
+extensions:
+  enabled: false
+  bundles: []
+  #  - name: my-extension
+  #    url: https://artifacts.example.org/superset/my-extension-1.0.0.supx
+  #    sha256: 3f1c...
+  volume: {}
+  #  persistentVolumeClaim:
+  #    claimName: superset-extensions
+  #  image:
+  #    reference: registry.example.org/superset-extensions:1.0.0
+  #    pullPolicy: IfNotPresent
+  pythonPackages: []
+
+# -----------------------------------------------------------------------------
+# Feature flags and configuration.
+# -----------------------------------------------------------------------------
+
+# Merged over Superset's DEFAULT_FEATURE_FLAGS. The chart manages four flags
+# from the switches below and refuses to render if you set them to something
+# else here: ALERT_REPORTS (alerts.enabled), EMBEDDED_SUPERSET
+# (embedding.enabled), ENABLE_EXTENSIONS (extensions.enabled) and
+# PLAYWRIGHT_REPORTS_AND_THUMBNAILS (alerts.screenshots.enabled). Each of those
+# needs more than the flag — a scheduler, a JWT secret, a browser — and the
+# switch is what provides it.
+featureFlags:
+  ENABLE_TEMPLATE_PROCESSING: true
+  DASHBOARD_RBAC: true
+  TAGGING_SYSTEM: true
+  # GLOBAL_ASYNC_QUERIES: true   # needs worker.enabled; the JWT secret and the
+  #                              # Valkey backend are already configured
+
+# Plain superset_config.py settings, as data: each key must be an UPPERCASE
+# Superset setting and the value any JSON-representable type. Written to
+# settings.json and applied after the chart's own settings, so these win.
+# Anything that needs Python (classes, callables, imports) goes in
+# configOverrides instead.
+config:
+  APP_NAME: Bombeke Beyond Data Platform
+  ROW_LIMIT: 50000
+  SQL_MAX_ROW: 100000
+  SQLLAB_TIMEOUT: 300
+  SUPERSET_WEBSERVER_TIMEOUT: 120
+  SQLLAB_ASYNC_TIME_LIMIT_SEC: 21600
+  # Refuse connections to the metastore's own database from the UI, and to
+  # sqlite files. Upstream default; stated here so nobody turns it off
+  # without seeing it.
+  PREVENT_UNSAFE_DB_CONNECTIONS: true
+
+# Python appended to superset_config.py, one file per key, executed in name
+# order after everything above. For OAuth/LDAP, custom security managers,
+# FLASK_APP_MUTATOR and the like.
+configOverrides: {}
+#  10-oauth: |
+#    from flask_appbuilder.security.manager import AUTH_OAUTH
+#    AUTH_TYPE = AUTH_OAUTH
+
+# The same, but rendered into a Secret — for snippets that must hold a
+# credential (an OAuth client secret, say). Or name your own Secret, whose
+# every key ending in .py is executed the same way.
+configOverridesSecret: {}
+configOverridesExistingSecret: ""
+
+# -----------------------------------------------------------------------------
+# HTTP security.
+# -----------------------------------------------------------------------------
+security:
+  # Trust X-Forwarded-* from the ingress controller. Required for correct
+  # redirects and for SESSION_COOKIE_SECURE behind a TLS-terminating proxy.
+  # Only safe when nothing but the ingress controller can reach the pods —
+  # which the NetworkPolicy can enforce (networkPolicy.ingressFrom).
+  proxyFix: true
+  # Cookies only over HTTPS. Browsers treat http://localhost as secure, so
+  # `kubectl port-forward` still works; plain-HTTP ingress does not.
+  sessionCookieSecure: true
+  sessionCookieSameSite: Lax      # forced to None when embedding is enabled
+  # Flask-Talisman: HSTS, CSP (with per-request script nonces), nosniff.
+  talisman:
+    enabled: true
+    # Upstream's default CSP minus the scarf.sh hosts, which only serve the
+    # frontend's telemetry pixel — so the CSP blocks it. frame-ancestors is
+    # managed by the chart from embedding.allowedDomains.
+    contentSecurityPolicy:
+      base-uri: ["'self'"]
+      default-src: ["'self'"]
+      img-src: ["'self'", "blob:", "data:", "https://cdn.document360.io"]
+      worker-src: ["'self'", "blob:"]
+      connect-src:
+        - "'self'"
+        - https://api.mapbox.com
+        - https://events.mapbox.com
+        - https://tile.openstreetmap.org
+        - https://tile.osm.ch
+        - https://a.basemaps.cartocdn.com
+      object-src: "'none'"
+      style-src:
+        - "'self'"
+        - "'unsafe-inline'"
+        - https://fonts.googleapis.com
+        - https://fonts.gstatic.com
+        - https://use.typekit.net
+        - https://use.typekit.com
+      font-src:
+        - "'self'"
+        - https://fonts.googleapis.com
+        - https://fonts.gstatic.com
+        - https://use.typekit.net
+        - https://use.typekit.com
+      script-src: ["'self'", "'strict-dynamic'"]
+    hsts:
+      maxAgeSeconds: 31536000
+      includeSubdomains: true
+
+# -----------------------------------------------------------------------------
+# Embedding (the @superset-ui/embedded-sdk).
+# -----------------------------------------------------------------------------
+#
+# Sets EMBEDDED_SUPERSET, GUEST_TOKEN_JWT_SECRET (from auth), CORS for the
+# listed origins, and CSP frame-ancestors so only they can frame Superset.
+# Cross-site iframes need SameSite=None cookies, which browsers only accept
+# with Secure — so this requires security.sessionCookieSecure and HTTPS.
+#
+# Your backend mints guest tokens with POST /api/v1/security/guest_token/ as a
+# user holding `can grant guest token on SecurityRestApi`. Never ship that
+# user's credentials to a browser; the browser only ever sees guest tokens.
+embedding:
+  enabled: false
+  # Origins allowed to frame Superset and call its API, e.g.
+  # https://portal.example.org. Required when enabled; there is no wildcard.
+  allowedDomains: []
+  # The role whose permissions guest users get. A dedicated, minimal role
+  # (datasource access for the embedded dashboards and nothing else) is
+  # strongly preferred over Public or Gamma. Create it in the UI, then name it.
+  guestRoleName: Public
+  guestTokenExpirySeconds: 300
+  # Optional `aud` claim tokens must carry.
+  guestTokenAudience: ""
+
+# -----------------------------------------------------------------------------
+# Alerts & reports.
+# -----------------------------------------------------------------------------
+#
+# Sets ALERT_REPORTS and deploys Celery beat, which runs `reports.scheduler`
+# every minute and `reports.prune_log` daily; the worker executes them.
+# Needs worker.enabled.
+alerts:
+  enabled: false
+  # Log instead of sending. Useful for a first rollout.
+  dryRun: false
+  # How the worker reaches the web tier to render charts and dashboards.
+  # Defaults to this release's Service.
+  webdriverBaseUrl: ""
+  # The URL put into e-mails and Slack messages. Defaults to the first ingress
+  # host over HTTPS, else webdriverBaseUrl.
+  webdriverBaseUrlUserFriendly: ""
+  # Rendered alerts and reports (PNG/PDF of charts and dashboards) need a
+  # headless Chromium, which the lean image does not have and which cannot be
+  # installed at runtime without root (it needs system libraries). Build a
+  # worker image and set worker.image:
+  #
+  #   FROM apache/superset:6.1.0
+  #   USER root
+  #   ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/playwright-browsers
+  #   RUN . /app/.venv/bin/activate && uv pip install playwright psycopg2-binary \
+  #         clickhouse-connect && playwright install-deps chromium \
+  #         && playwright install chromium
+  #   USER superset
+  #
+  # Without it, alerts and reports still work for CSV and text content.
+  screenshots:
+    enabled: false
+  smtp:
+    host: ""
+    port: 587
+    starttls: true
+    ssl: false
+    # Verify the server's certificate on SSL/STARTTLS. Leave on.
+    sslServerAuth: true
+    user: ""
+    password: ""
+    existingSecret: ""
+    existingSecretPasswordKey: smtp-password
+    mailFrom: superset@example.org
+  slack:
+    # A bot token (xoxb-...). Inline, or from a Secret of yours.
+    token: ""
+    existingSecret: ""
+    existingSecretKey: slack-api-token
+
+# -----------------------------------------------------------------------------
+# Web (gunicorn).
+# -----------------------------------------------------------------------------
+web:
+  replicaCount: 1
+  # Gunicorn. Superset is mostly I/O-bound, so a few processes with threads
+  # beats many processes: each process holds its own metastore pool and its
+  # own copy of the app (~300 MB).
+  gunicorn:
+    workers: 2
+    threads: 8
+    workerClass: gthread
+    # Must exceed config.SUPERSET_WEBSERVER_TIMEOUT, or gunicorn kills the
+    # worker before Superset can return its own timeout error.
+    timeout: 150
+    keepAlive: 5
+    # Recycle workers to bound slow memory growth.
+    maxRequests: 1000
+    maxRequestsJitter: 100
+    # 0 = unlimited, the upstream default. Superset GET URLs can carry large
+    # form_data; the ingress controller's header limits apply regardless.
+    limitRequestLine: 0
+    limitRequestFieldSize: 0
+    logLevel: info
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      memory: 2Gi
+  startupProbe:
+    enabled: true
+    periodSeconds: 10
+    timeoutSeconds: 5
+    # Up to 5 minutes: the app imports every engine spec and syncs caches on
+    # first start.
+    failureThreshold: 30
+  readinessProbe:
+    enabled: true
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  livenessProbe:
+    enabled: true
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 6
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 75
+    targetMemoryUtilizationPercentage: ""
+  # Created when more than one replica can run (replicaCount > 1 or
+  # autoscaling). On one replica it would block every node drain.
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+  podAnnotations: {}
+  podLabels: {}
+  extraEnv: []
+  extraVolumes: []
+  extraVolumeMounts: []
+
+# -----------------------------------------------------------------------------
+# Celery worker.
+# -----------------------------------------------------------------------------
+worker:
   enabled: true
-  redis:
-    enabled: false
-  postgresql:
-    enabled: false
-  ingress:
+  replicaCount: 1
+  # Overrides `image` for the worker only — for a screenshot-capable image.
+  image:
+    registry: ""
+    repository: ""
+    tag: ""
+    digest: ""
+  concurrency: 4
+  # prefork isolates each task in its own process; a query that leaks or
+  # crashes takes one child with it, not the worker.
+  pool: prefork
+  # Recycle children to bound memory growth from large result sets.
+  maxTasksPerChild: 100
+  # Default queues are fine unless you route tasks yourself.
+  queues: ""
+  logLevel: INFO
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      memory: 3Gi
+  # `celery inspect ping` against this worker. It imports the whole app, so it
+  # is slow and deliberately infrequent.
+  livenessProbe:
     enabled: true
-    ingressClassName: ~
-    annotations:
-      # kubernetes.io/tls-acme: "true"
-      ## Extend timeout to allow long running queries.
-      # nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
-      # nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
-      # nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
-      cert-manager.io/cluster-issuer: le-staging
-      traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    path: /
-    pathType: ImplementationSpecific
-    hosts:
-      - superset.default.svc.cluster.local
-
-  init:
-    loadExamples: false
-
-  extraSecretEnv:
-    SUPERSET_SECRET_KEY: thisISaSECRET_1234
-
-  configOverrides:
-    sql_connect: |
-      SQLALCHEMY_DATABASE_URI: "postgresql+psycopg2://{{ .Values.supersetNode.connections.db_user | default "superset" }}:{{ .Values.supersetNode.connections.db_pass | default "superset" }}@{{ .Values.supersetNode.connections.db_host }}-stackgres-simple:5432/{{ .Values.supersetNode.connections.db_name | default "superset" }}"
-    secret: |
-      from superset.constants import CHANGE_ME_SECRET_KEY
-      print(f"Setting up secret key for Superset Admin")
-      SECRET_KEY= os.getenv("SECRET_KEY") or os.getenv("SUPERSET_SECRET_KEY") or CHANGE_ME_SECRET_KEY
-      if SECRET_KEY is None or SECRET_KEY == 'CHANGE_ME_TO_A_COMPLEX_RANDOM_SECRET' or SECRET_KEY =='thisISaSECRET_1234':
-        import secrets
-        import base64
-        random_bytes = secrets.token_bytes(42)
-        # SECRET_KEY = base64.b64encode(random_bytes).decode('utf-8')
-        print(f"Set the Secret successfully.")
-        os.environ["SECRET_KEY"] = SECRET_KEY
-        os.environ["SUPERSET_SECRET_KEY"] = SECRET_KEY
-      else:
-        os.environ["SUPERSET_SECRET_KEY"] = SECRET_KEY
-      FEATURE_FLAGS: {
-        "ENABLE_TEMPLATE_PROCESSING": True,
-        "ALERT_REPORTS": True,
-        "ENABLE_ADVANCED_DATA_TYPES": True,
-        "DASHBOARD_NATIVE_FILTERS": True,
-        "ENABLE_SUPERSET_META_DB": True,
-        "DYNAMIC_PLUGINS": True
-      }
-      ENABLE_PROXY_FIX = True
-      ALERT_REPORTS_NOTIFICATION_DRY_RUN = True
-      APP_NAME = "Bombeke Beyond Data Platform"
-      CACHE_CONFIG = {
-          'CACHE_TYPE': 'redis',
-          'CACHE_DEFAULT_TIMEOUT': 300,  # 5 minutes
-          'CACHE_KEY_PREFIX': 'superset_',
-          'CACHE_REDIS_URL': 'redis://localhost:6379/0'
-      }
-
-      SQLLAB_QUERY_CACHE_TIMEOUT = 300  # Query cache timeout
-      CACHE_DEFAULT_TIMEOUT = 300  
-     
-  supersetNode:
-    connections:
-      # Redis must be set redis.enabled:false
-      redis_host: "smartai-valkey.smartai.svc.cluster.local"
-      redis_port: "6379"
-      redis_user: ""
-      # redis_password: superset
-      redis_cache_db: "1"
-      redis_celery_db: "0"
-      # Or SSL port is usually 6380
-      # Update following for using Redis with SSL
-      redis_ssl:
-        enabled: false
-        ssl_cert_reqs: CERT_NONE
-      # PostgreSQL must be set postgresql.enabled:false
-      # -- Database type for Superset metadata (Supported types: "postgresql", "mysql")
-      db_type: "postgresql"
-      db_host: "smartai-stackgres-simple.smartai.svc.cluster.local"
-      db_port: "5432"
-      db_user: superset
-      db_pass: superset
-      db_name: superset
-  #configOverrides:
-  #  DATABASE_DIALECT: "postgresql"
-  #  DATABASE_USER: "<existing-db-username>"
-  #  DATABASE_PASSWORD: "<existing-db-password>"
-  #  DATABASE_HOST: "<existing-db-host>"
-  #  DATABASE_PORT: "<existing-db-port>"
-  #  DATABASE_DB: "<existing-db-name>"
-
-  #extraEnv:
-  #  - name: SUPERSET_DATABASE_URI
-  #    value: "postgresql+psycopg2://<existing-db-username>:<existing-db-password>@<existing-db-host>:<existing-db-port>/<existing-db-name>"
-
-  bootstrapScript: |
-    #!/bin/bash
-
-    echo "Installing extra drivers"
-    apt-get update && apt-get install -y pkg-config default-libmysqlclient-dev build-essential
-
-    uv pip install .[postgres] \
-      psycopg2-binary \
-      Pillow \
-      polars \
-      shapely \
-      duckdb \
-      duckdb-engine \
-      "shillelagh[genericjsonapi]" \
-      sqlalchemy-solr \
-      starrocks \
-      singlestoredb \
-      "clickhouse-connect>=0.13.0" \
-      pymongosql && \
-    if [ ! -f ~/bootstrap ]; then echo "Running Superset with uid {{ .Values.runAsUser }}" > ~/bootstrap; fi
-
-trino:
-  enabled: false
-  server:
-    workers: 1
-  catalogs:
-    mongodb: |
-      connector.name=mongodb
-      mongodb.connection-url=mongodb://user:pass@sample.host:27017/
-
-kube-starrocks:
-  enabled: false
-  operator:
-    starrocksOperator:
-      enabled: true
-      resources:
-        limits:
-          cpu: 100m # 500m
-          memory: 200Mi # 800Mi
-        requests:
-          cpu: 100m # 500m
-          memory: 400Mi # 400Mi
-
-  starrocks:
+    initialDelaySeconds: 120
+    periodSeconds: 120
+    timeoutSeconds: 60
+    failureThreshold: 3
+  podDisruptionBudget:
     enabled: true
-    starrocksCluster:
-      enabledFe: true
-      enabledCn: false
-    initPassword:
-      enabled: true
-      # Set a password secret, for example:
-      # kubectl create secret generic starrocks-root-pass --from-literal=password='g()()dpa$$word'
-      passwordSecret: starrocks-root-pass
+    maxUnavailable: 1
+  podAnnotations: {}
+  podLabels: {}
+  extraEnv: []
+  extraVolumes: []
+  extraVolumeMounts: []
 
-    starrocksFESpec:
-      replicas: 3
-      resources:
-        requests:
-          cpu: 1
-          memory: 1Gi
-      storageSpec:
-        name: fe
+# -----------------------------------------------------------------------------
+# Celery beat.
+# -----------------------------------------------------------------------------
+#
+# Deployed when alerts.enabled, or forced with enabled: true (for cache
+# warm-up schedules added in configOverrides). Always ONE replica, with the
+# Recreate strategy: two schedulers fire every report twice.
+beat:
+  enabled: false
+  logLevel: INFO
+  resources:
+    requests:
+      cpu: 50m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+  podAnnotations: {}
+  podLabels: {}
+  extraEnv: []
 
-    starrocksBeSpec:
-      replicas: 3
-      resources:
-        requests:
-          cpu: 1
-          memory: 2Gi
-      storageSpec:
-        name: be
-        storageSize: 15Gi
-    starrocksCnSpec:
-      resources:
-        requests:
-          cpu: 1
-          memory: 2Gi
-    starrocksFeProxySpec:
-      enabled: true
+# -----------------------------------------------------------------------------
+# Init Job: migrations, roles and permissions, admin user.
+# -----------------------------------------------------------------------------
+#
+# A plain Job named after the release revision, not a Helm hook: hooks run
+# after `--wait` has already waited for the web pods, and the web pods wait for
+# this Job's migrations, so a hook would deadlock `helm install --wait`.
+# Finished Jobs are garbage-collected after ttlSecondsAfterFinished.
+init:
+  enabled: true
+  backoffLimit: 3
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 86400
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
+# The init container in every web/worker/beat pod that waits for the
+# metastore and Valkey to accept connections, and for the metastore schema to
+# reach this image's migration head.
+waitForDependencies:
+  enabled: true
+  # Give up and let the pod restart after this long.
+  timeoutSeconds: 900
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+# -----------------------------------------------------------------------------
+# Networking.
+# -----------------------------------------------------------------------------
+service:
+  type: ClusterIP
+  port: 8088
+  nodePort: ""
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  # Shortcut for the cert-manager.io/cluster-issuer annotation.
+  certIssuer: ""
+  annotations: {}
+  #  traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  #  # Long-running SQL Lab queries:
+  #  nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+  hosts:
+    - host: superset.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: superset-tls
+  #    hosts:
+  #      - superset.local
+
+networkPolicy:
+  enabled: true
+  # Who may reach the web port.
+  #   true  - anyone.
+  #   false - only the peers in ingressFrom (your ingress controller), this
+  #           release's workers (which render screenshots through it) and pods
+  #           labelled `<fullname>-client: "true"`. With security.proxyFix on,
+  #           this is what makes trusting X-Forwarded-* safe.
+  allowExternal: true
+  ingressFrom: []
+  #  - namespaceSelector:
+  #      matchLabels:
+  #        kubernetes.io/metadata.name: traefik
+  # Worker, beat and init pods accept no inbound traffic at all, regardless.
+  #
+  # Egress: data sources live anywhere, and the drivers come from a package
+  # index, so egress is open by default. When restricted, DNS, the metastore
+  # and Valkey are allowed automatically; add your data sources, the package
+  # index and SMTP/Slack in extraEgress.
+  restrictEgress: false
+  extraEgress: []
+
+# -----------------------------------------------------------------------------
+# Pods.
+# -----------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# The image's `superset` user. fsGroup makes the Secret and emptyDir volumes
+# readable by it without making them world-readable.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  privileged: false
+  capabilities:
+    drop: ["ALL"]
+
+terminationGracePeriodSeconds: 60
+priorityClassName: ""
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+# Applied to every pod, in addition to the per-component extraEnv.
+extraEnv: []
+# e.g. a Secret of your own with SUPERSET_* variables for configOverrides.
+extraEnvFrom: []

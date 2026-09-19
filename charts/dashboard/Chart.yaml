@@ -1,42 +1,34 @@
+annotations:
+  category: Analytics
+  licenses: Apache-2.0
+  images: |
+    - name: superset
+      image: docker.io/apache/superset:6.1.0
+
 apiVersion: v2
 name: dashboard
-description: A Helm chart for Kubernetes
+description: >-
+  Apache Superset 6 — web, Celery worker and beat — on the upstream lean image,
+  with an external PostgreSQL/MySQL metastore, Valkey for caching and the Celery
+  broker, database drivers for TimescaleDB/PostgreSQL and ClickHouse, optional
+  .supx extensions, embedding and alerts & reports.
+type: application
+keywords:
+  - superset
+  - dashboards
+  - analytics
+  - bi
 
 dependencies:
-  - name: superset
-    version: "~0"
-    repository: "https://apache.github.io/superset"
-    condition: superset.enabled
-  - name: trino
-    version: "~0"
-    repository: "https://trinodb.github.io/charts"
-    condition: trino.enabled
-  - name: kube-starrocks
-    version: "~1"
-    repository: "https://starrocks.github.io/starrocks-kubernetes-operator"
-    condition: kube-starrocks.enabled
   - name: valkey
     version: "~0"
     repository: "https://valkey.io/valkey-helm"
     condition: valkey.enabled
 
-# A chart can be either an 'application' or a 'library' chart.
-#
-# Application charts are a collection of templates that can be packaged into versioned archives
-# to be deployed.
-#
-# Library charts provide useful utilities or functions for the chart developer. They're included as
-# a dependency of application charts to inject those utilities and functions into the rendering
-# pipeline. Library charts do not define any templates and therefore cannot be deployed.
-type: application
-
-# This is the chart version. This version number should be incremented each time you make changes
-# to the chart and its templates, including the app version.
-# Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.1.66
-
-# This is the version number of the application being deployed. This version number should be
-# incremented each time you make changes to the application. Versions are not expected to
-# follow Semantic Versioning. They should reflect the version the application is using.
-# It is recommended to use it with quotes.
-appVersion: "1.0.0"
+# 0.2.0 replaces the Drupal + StackGres + upstream-superset-subchart chart with
+# a Superset chart of its own. Not an in-place upgrade: every resource name
+# changes, the Drupal StatefulSet and PVCs are gone, and the metastore is no
+# longer created here — point `metastore` at an existing PostgreSQL (for
+# example the timescaledb chart in this repository).
+version: 0.2.0
+appVersion: "6.1.0"

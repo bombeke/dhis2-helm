@@ -1,0 +1,74 @@
+{{- if include "dashboard.beatEnabled" . }}
+{{- $fullname := include "dashboard.fullname" . }}
+{{- $component := dict "ctx" . "component" "beat" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-beat
+  labels:
+    {{- include "dashboard.componentLabels" $component | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  # Exactly one, and never two at once — not even during a rollout. Two
+  # schedulers fire every alert and report twice; Recreate stops the old pod
+  # before the new one starts.
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "dashboard.componentSelectorLabels" $component | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dashboard.componentSelectorLabels" $component | nindent 8 }}
+        {{- include "dashboard.podLabels" . | nindent 8 }}
+        {{- with .Values.beat.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- include "dashboard.checksums" . | nindent 8 }}
+        {{- with .Values.beat.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "dashboard.podSpecCommon" . | nindent 6 }}
+      terminationGracePeriodSeconds: 30
+      initContainers:
+        {{- include "dashboard.initContainers" (dict "ctx" . "image" (include "dashboard.image" .) "migrations" true) | nindent 8 }}
+      containers:
+        - name: beat
+          image: {{ include "dashboard.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          # The schedule file goes to /tmp: the working directory is on the
+          # read-only root filesystem. Losing it on restart only means beat
+          # recomputes the next run times.
+          command:
+            - celery
+            - --app=superset.tasks.celery_app:app
+            - beat
+            - --pidfile=
+            - --schedule=/tmp/celerybeat-schedule
+            - --loglevel={{ .Values.beat.logLevel }}
+          env:
+            {{- include "dashboard.env" . | nindent 12 }}
+            {{- with .Values.beat.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.beat.resources | nindent 12 }}
+          volumeMounts:
+            {{- include "dashboard.volumeMounts" . | nindent 12 }}
+      volumes:
+        {{- include "dashboard.volumes" (dict "ctx" .) | nindent 8 }}
+{{- end }}

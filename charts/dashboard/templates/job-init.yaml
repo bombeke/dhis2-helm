@@ -1,0 +1,69 @@
+{{- if .Values.init.enabled }}
+{{- $fullname := include "dashboard.fullname" . }}
+{{- $component := dict "ctx" . "component" "init" }}
+# A plain Job, one per release revision, rather than a Helm hook. The web,
+# worker and beat pods wait in an init container until this Job has migrated
+# the schema; as a post-install hook it would only start after `helm install
+# --wait` had waited for those pods — forever. The revision in the name makes
+# every upgrade a new Job (Job specs are immutable) and lets Helm delete the
+# previous one.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "%s-init-%d" $fullname (int .Release.Revision) | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "dashboard.componentLabels" $component | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  backoffLimit: {{ .Values.init.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.init.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.init.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "dashboard.componentSelectorLabels" $component | nindent 8 }}
+        {{- include "dashboard.podLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      {{- include "dashboard.podSpecCommon" . | nindent 6 }}
+      initContainers:
+        {{- include "dashboard.initContainers" (dict "ctx" . "image" (include "dashboard.image" .) "migrations" false) | nindent 8 }}
+      containers:
+        - name: init
+          image: {{ include "dashboard.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command: ["/bin/bash", "{{ include "dashboard.confDir" . }}/init.sh"]
+          env:
+            {{- include "dashboard.env" . | nindent 12 }}
+            - name: ADMIN_CREATE
+              value: {{ .Values.admin.create | quote }}
+            {{- if .Values.admin.create }}
+            - name: ADMIN_USERNAME
+              value: {{ .Values.admin.username | quote }}
+            - name: ADMIN_FIRST_NAME
+              value: {{ .Values.admin.firstName | quote }}
+            - name: ADMIN_LAST_NAME
+              value: {{ .Values.admin.lastName | quote }}
+            - name: ADMIN_EMAIL
+              value: {{ .Values.admin.email | quote }}
+            - name: ADMIN_PASSWORD_FILE
+              value: {{ include "dashboard.secretDir" . }}/admin-password
+            - name: ADMIN_RESET_PASSWORD
+              value: {{ .Values.admin.resetPasswordOnUpgrade | quote }}
+            {{- end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.init.resources | nindent 12 }}
+          volumeMounts:
+            {{- include "dashboard.volumeMounts" . | nindent 12 }}
+      volumes:
+        {{- include "dashboard.volumes" (dict "ctx" . "admin" .Values.admin.create) | nindent 8 }}
+{{- end }}
