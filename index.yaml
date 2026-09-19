@@ -5058,6 +5058,31 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/smartai-0.1.1/smartai-0.1.1.tgz
     version: 0.1.1
+  timescaledb:
+  - annotations:
+      category: Database
+      images: |
+        - name: timescaledb
+          image: docker.io/timescale/timescaledb-ha:pg18.4-ts2.29.0
+      licenses: PostgreSQL AND Apache-2.0 AND TSL
+    apiVersion: v2
+    appVersion: "18.4"
+    created: "2026-09-19T09:29:09.798600175Z"
+    description: PostgreSQL 18 with TimescaleDB, timescaledb_toolkit and PostGIS on
+      the timescale/timescaledb-ha image, running as a single tuned node with authentication,
+      TLS and persistent storage.
+    digest: ad8caeeb2eda9efe54a5f7cdd222884a2edf847c83145f38a82a074b184a76eb
+    keywords:
+    - timescaledb
+    - postgresql
+    - postgis
+    - timeseries
+    - database
+    name: timescaledb
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/timescaledb-0.1.0/timescaledb-0.1.0.tgz
+    version: 0.1.0
   tritonserver:
   - apiVersion: v2
     appVersion: 24.12.0
@@ -5170,4 +5195,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2026-09-18T22:12:36.785902939Z"
+generated: "2026-09-19T09:29:09.798837423Z"
