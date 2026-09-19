@@ -5134,6 +5134,32 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/tritonserver-0.1.1/tritonserver-0.1.1.tgz
     version: 0.1.1
+  typesense:
+  - annotations:
+      category: Search
+      images: |
+        - name: typesense
+          image: docker.io/typesense/typesense:30.2
+        - name: curl
+          image: docker.io/curlimages/curl:8.11.1
+      licenses: GPL-3.0
+    apiVersion: v2
+    appVersion: "30.2"
+    created: "2026-09-19T09:55:47.441474871Z"
+    description: Typesense — full-text and faceted search — as a single node or a
+      Raft quorum, with the peer list resolved from headless-service DNS, the bootstrap
+      API key held in a Secret, and optional scheduled snapshot backups.
+    digest: 0cc205a40af558c2c3d830273f24782dda15471831600067ddea4b4e4f0fb1e0
+    keywords:
+    - typesense
+    - search
+    - full-text
+    - faceted-search
+    name: typesense
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/typesense-0.1.0/typesense-0.1.0.tgz
+    version: 0.1.0
   web:
   - apiVersion: v2
     appVersion: 1.16.0
@@ -5195,4 +5221,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2026-09-19T09:29:09.798837423Z"
+generated: "2026-09-19T09:55:47.441771304Z"
