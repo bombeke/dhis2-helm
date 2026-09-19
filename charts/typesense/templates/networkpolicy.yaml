@@ -1,0 +1,73 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "typesense.fullname" . }}
+  labels:
+    {{- include "typesense.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "typesense.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    {{- if .Values.networkPolicy.restrictEgress }}
+    - Egress
+    {{- end }}
+  ingress:
+    # The API port.
+    - ports:
+        - port: http
+          protocol: TCP
+      {{- if not .Values.networkPolicy.allowExternal }}
+      from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              {{ include "typesense.clientLabel" . }}: "true"
+        {{- with .Values.networkPolicy.extraFrom }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+    {{- if include "typesense.clustered" . }}
+    # The peering port, and only from this release's own pods — in both
+    # allowExternal settings, deliberately. Raft peering has no authentication
+    # and no encryption: anything that can open this port can join the quorum
+    # and read every document in it.
+    - ports:
+        - port: peering
+          protocol: TCP
+      from:
+        - podSelector:
+            matchLabels:
+              {{- include "typesense.selectorLabels" . | nindent 14 }}
+    {{- end }}
+  {{- if .Values.networkPolicy.restrictEgress }}
+  egress:
+    # DNS. The peer resolver depends on it, so this is not optional.
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- if include "typesense.clustered" . }}
+    # Its own peers, and nothing else outward.
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "typesense.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: {{ .Values.cluster.peeringPort }}
+          protocol: TCP
+        - port: {{ .Values.service.port }}
+          protocol: TCP
+    {{- end }}
+    {{- with .Values.networkPolicy.extraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+{{- end }}

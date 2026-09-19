@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "typesense.fullname" . }}-test-connection
+  labels:
+    {{- include "typesense.labels" . | nindent 4 }}
+    # Lets the pod through the NetworkPolicy when allowExternal is false.
+    {{ include "typesense.clientLabel" . }}: "true"
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  securityContext:
+    {{- toYaml .Values.podSecurityContext | nindent 4 }}
+  containers:
+    - name: curl
+      image: {{ include "typesense.clientImage" . }}
+      imagePullPolicy: {{ .Values.clientImage.pullPolicy }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      command:
+        - /bin/sh
+        - -ec
+        - |
+          base="{{ include "typesense.scheme" . }}://{{ include "typesense.serviceHost" . }}:{{ .Values.service.port }}"
+          ca="{{ include "typesense.curlCaFlag" . }}"
+
+          # /health is unauthenticated, so this checks the network path and the
+          # Service without proving anything about the key.
+          echo "GET ${base}/health"
+          curl $ca --silent --show-error --fail "${base}/health" | tee /tmp/health; echo
+          grep -q '"ok":[[:space:]]*true' /tmp/health || { echo "node is not ok"; exit 1; }
+
+          # The key goes in a curl config file, not in argv.
+          umask 077
+          printf 'header = "X-TYPESENSE-API-KEY: %s"\n' \
+            "$(cat {{ include "typesense.secretDir" . }}/api-key)" > /tmp/curlrc
+
+          # /collections needs the admin key, so this is what actually proves
+          # the Secret in the pod matches the key the server booted with.
+          echo "GET ${base}/collections"
+          curl --config /tmp/curlrc $ca --silent --show-error --fail "${base}/collections" >/dev/null
+          echo "authenticated ok"
+          {{- if include "typesense.clustered" . }}
+
+          # /debug reports this node's Raft state: 1 LEADER, 4 FOLLOWER.
+          # Anything else means the quorum has not formed.
+          echo "GET ${base}/debug"
+          curl --config /tmp/curlrc $ca --silent --show-error --fail "${base}/debug" | tee /tmp/debug; echo
+          grep -qE '"state":[[:space:]]*(1|4)' /tmp/debug || { echo "node has no quorum"; exit 1; }
+          {{- end }}
+      env:
+        - name: HOME
+          value: /tmp
+      volumeMounts:
+        - name: secrets
+          mountPath: {{ include "typesense.secretDir" . }}
+          readOnly: true
+        {{- if .Values.tls.enabled }}
+        - name: tls
+          mountPath: {{ include "typesense.tlsDir" . }}
+          readOnly: true
+        {{- end }}
+        - name: tmp
+          mountPath: /tmp
+  volumes:
+    - name: secrets
+      secret:
+        secretName: {{ include "typesense.secretName" . }}
+        defaultMode: 0440
+    {{- if .Values.tls.enabled }}
+    - name: tls
+      secret:
+        secretName: {{ .Values.tls.existingSecret }}
+        defaultMode: 0440
+    {{- end }}
+    - name: tmp
+      emptyDir:
+        sizeLimit: 16Mi

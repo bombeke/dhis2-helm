@@ -1,0 +1,80 @@
+Typesense {{ .Chart.AppVersion }} is starting{{ if include "typesense.clustered" . }} as a {{ .Values.replicaCount }}-node Raft cluster{{ else }} as a single node{{ end }}.
+
+In-cluster address:
+  {{ include "typesense.scheme" . }}://{{ include "typesense.serviceHost" . }}:{{ .Values.service.port }}
+
+Bootstrap admin API key:
+  kubectl get secret --namespace {{ .Release.Namespace }} {{ include "typesense.secretName" . }} \
+    -o jsonpath='{.data.api-key}' | base64 -d
+
+This key can do anything, including deleting every collection. Do not ship it
+to a browser or to a service that only searches. Derive a scoped, search-only
+key from it instead:
+
+  curl -X POST '{{ include "typesense.scheme" . }}://localhost:{{ .Values.service.port }}/keys' \
+    -H "X-TYPESENSE-API-KEY: $ADMIN_KEY" -H 'Content-Type: application/json' \
+    -d '{"description":"search-only","actions":["documents:search"],"collections":["*"]}'
+
+Talk to it from your machine:
+  kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "typesense.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  curl '{{ include "typesense.scheme" . }}://localhost:{{ .Values.service.port }}/health'
+{{- if include "typesense.clustered" . }}
+
+Cluster state — 1 is LEADER, 4 is FOLLOWER:
+  kubectl exec --namespace {{ .Release.Namespace }} {{ include "typesense.fullname" . }}-0 -c peer-resolver -- cat {{ include "typesense.nodesFile" . }}
+  kubectl logs --namespace {{ .Release.Namespace }} {{ include "typesense.fullname" . }}-0 -c peer-resolver
+
+The peer list comes from the headless Service's DNS and is rewritten whenever a
+pod gets a new IP, so a rescheduled node rejoins on its own. Scale by one step
+at a time ({{ .Values.replicaCount }} -> {{ add .Values.replicaCount 2 }}), never while a node is down.
+{{- end }}
+{{- if .Values.backup.enabled }}
+
+Backups: POST /operations/snapshot on "{{ .Values.backup.schedule }}", against
+{{ include "typesense.fullname" . }}-{{ .Values.backup.targetOrdinal }}, writing a timestamped directory under {{ .Values.backup.path }}.
+  kubectl get cronjob --namespace {{ .Release.Namespace }} {{ include "typesense.fullname" . }}-backup
+  kubectl create job --namespace {{ .Release.Namespace }} --from=cronjob/{{ include "typesense.fullname" . }}-backup backup-now
+
+To restore: stop the node, replace the contents of {{ include "typesense.dataDir" . }} with a
+snapshot directory, start it. For a cluster, restore one node and let Raft
+bring the others back into line.
+{{- if not .Values.backup.existingClaim }}
+
+NOTE: backup.existingClaim is not set, so each pod has its own ReadWriteOnce
+backup volume. The CronJob cannot mount a volume a running pod holds, so
+retention pruning is SKIPPED and {{ .Values.backup.path }} grows without limit.
+Either set backup.existingClaim to a ReadWriteMany PVC, or expire the snapshots
+in your storage layer.
+{{- else if le (int .Values.backup.retentionDays) 0 }}
+
+NOTE: backup.retentionDays is 0, so nothing is pruned and {{ .Values.backup.path }} grows
+without limit.
+{{- end }}
+{{- end }}
+{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.allowExternal) }}
+
+The NetworkPolicy only admits labelled pods on the API port. Add this to
+clients:
+  {{ include "typesense.clientLabel" . }}: "true"
+{{- end }}
+{{- if not .Values.tls.enabled }}
+
+TLS is OFF: the API key crosses the cluster network in a plaintext header on
+every request. Set tls.enabled with a certificate covering both
+{{ include "typesense.serviceHost" . }} and {{ include "typesense.fullname" . }}-*.{{ include "typesense.headlessHost" . }}.
+{{- end }}
+{{- if include "typesense.clustered" . }}
+
+Raft peering traffic between nodes is unencrypted and unauthenticated — TLS
+above does not cover it. The NetworkPolicy is what keeps port {{ .Values.cluster.peeringPort }} reachable
+only by this release's own pods; do not expose it through a Service or Ingress.
+{{- end }}
+{{- if not .Values.persistence.enabled }}
+
+WARNING: persistence is disabled. Every index is lost when a pod is deleted.
+{{- end }}
+
+Remember what search is for: it returns IDs. Re-read the record body from your
+system of record with permissions applied — an index cannot be taught your
+tenant and row-level rules, so it must never be the thing that answers with
+data.

@@ -1,0 +1,423 @@
+# -----------------------------------------------------------------------------
+# Typesense — full-text and faceted search.
+# -----------------------------------------------------------------------------
+#
+# An event-fed projection. The rule that matters, and that holds regardless of
+# backend: SEARCH RETURNS IDS, and the record body is re-read from the system of
+# record with permissions applied. A search index cannot be taught tenant and
+# row-level rules, so it is never allowed to be the thing that answers with
+# data. Nothing in this chart can enforce that for you; it is why the chart
+# keeps the bootstrap key in a Secret and expects your services to hold scoped,
+# search-only keys instead.
+#
+# Where settings live:
+#   Secret     typesense-server.ini, complete, including the bootstrap API key.
+#              The whole file is a Secret because one line of it is — the key
+#              is never an environment variable, so it stays out of
+#              `kubectl describe pod` and /proc/1/environ.
+#   ConfigMap  the peer-resolver and snapshot scripts. Nothing secret.
+#   Volume     /data on a PersistentVolumeClaim per pod, /tmp and the shared
+#              nodes-file directory as emptyDirs, because the container's root
+#              filesystem is read-only.
+#
+# Single node or quorum, decided by `replicaCount` — see the comment there.
+
+nameOverride: ""
+fullnameOverride: ""
+clusterDomain: cluster.local
+
+commonLabels: {}
+commonAnnotations: {}
+
+image:
+  registry: docker.io
+  repository: typesense/typesense
+  tag: "30.2"
+  pullPolicy: IfNotPresent
+
+# The Typesense image ships NEITHER curl NOR wget, and /bin/sh in it is dash,
+# so even the /dev/tcp trick is unavailable outside bash. Anything in this
+# chart that has to speak HTTP — the backup CronJob, the helm test — uses this
+# image instead of contorting the main one.
+clientImage:
+  registry: docker.io
+  repository: curlimages/curl
+  tag: "8.11.1"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# 1 = standalone. No nodes file, no peer resolver, no Raft — the simplest thing
+# that works, and the right choice when the index can be rebuilt from its source
+# of truth in minutes.
+#
+# 3, 5, 7 = a Raft quorum. MUST BE ODD: Raft tolerates (N-1)/2 failures, so 3
+# survives one node and 5 survives two, while an even number buys nothing — 4
+# tolerates the same single failure as 3 and merely adds a node that can fail.
+# The chart refuses an even count above 1.
+#
+# Changing this on a live cluster changes the quorum. Scale by one step at a
+# time (3 -> 5), never straight from 3 to 7, and never while a node is down.
+replicaCount: 1
+
+auth:
+  # The bootstrap admin key: it can do ANYTHING, including deleting every
+  # collection. It belongs in exactly two places — this Secret, and whatever
+  # creates your scoped keys. Application code should hold a search-only key
+  # generated through the /keys API, not this one.
+  #
+  # Leave empty to generate a random key on install. Upgrades keep it by looking
+  # up the live Secret; `helm template` (e.g. Argo CD) cannot do that lookup, so
+  # GitOps installs MUST set apiKey or existingSecret.
+  apiKey: ""
+  # Your own Secret instead of the chart's. It must contain the key `api-key`.
+  # The chart still renders typesense-server.ini into its own Secret, reading
+  # the value from yours at template time is not possible — so when this is set
+  # the chart mounts YOUR secret and assembles the ini in an init container.
+  existingSecret: ""
+
+# -----------------------------------------------------------------------------
+# Server configuration.
+# -----------------------------------------------------------------------------
+#
+# Rendered into the `[server]` section of typesense-server.ini, one `key = value`
+# per entry, and merged key by key — overriding one setting keeps the rest.
+# Full list: https://typesense.org/docs/30.2/api/server-configuration.html
+#
+# The chart computes and owns api-key, data-dir, api-address, api-port,
+# peering-port, peering-address, nodes and the ssl-* pair; setting those here
+# has no effect. Precedence in Typesense is command line > config file >
+# environment, which is why per-pod values like peering-address are passed as
+# arguments and everything else lives in the file.
+config:
+  # CORS. Browsers talking straight to Typesense is the normal deployment for
+  # instant-search, and it only works with a search-only key. Leaving
+  # enable-cors on while shipping the ADMIN key to a browser is the single
+  # worst thing you can do with this chart.
+  enable-cors: true
+  # Restrict the allowed origins, space separated. Empty means any origin.
+  # enable-cors-domains: "https://app.example.org"
+
+  # thread-pool-size: the setting that matters most on Kubernetes, and the one
+  # nobody sets. Typesense defaults it to NUM_CORES * 8, where NUM_CORES is read
+  # from the MACHINE, not from the container's CPU limit. On a 64-core node with
+  # a 2-CPU limit that is 512 threads competing for 2 CPUs' worth of quota: the
+  # process spends its time context-switching and being throttled by the CFS
+  # scheduler, and the symptom is p99 latency that is terrible while the CPU
+  # graph looks calm. Set it from `resources.limits.cpu`, at roughly 8x.
+  thread-pool-size: 32
+
+  # LRU cache of search responses, in entries. Search traffic is usually a
+  # power law — a small number of queries make up most of the volume — so this
+  # is cheap and effective. Raise it if your working set of queries is wide.
+  cache-num-entries: 10000
+
+  # Documents loaded in parallel when the on-disk database is read back at
+  # startup. Startup time matters more here than it looks: it is also recovery
+  # time after a node restart, and a node that is slow to come back extends the
+  # window in which the quorum is one failure from being lost.
+  num-documents-parallel-load: 1000
+
+  # Raft log -> snapshot interval, in seconds. Shorter means a smaller log to
+  # replay on restart and faster recovery; longer means less write amplification.
+  # The default is 3600.
+  snapshot-interval-seconds: 3600
+
+  # Read/write lag thresholds, in Raft log entries. A follower further behind
+  # than healthy-read-lag stops serving reads instead of answering from a stale
+  # index; past healthy-write-lag the cluster refuses writes. These are the
+  # knobs that decide whether a struggling node returns wrong answers or
+  # returns an error, and an error is the better failure.
+  healthy-read-lag: 1000
+  healthy-write-lag: 500
+
+  # Refuse writes before the pod dies rather than after. Without these, a node
+  # that fills its volume or its memory limit is an OOMKill or a corrupt write;
+  # with them it starts rejecting writes with a clear error while reads keep
+  # working.
+  disk-used-max-percentage: 90
+  memory-used-max-percentage: 90
+
+  # Log any request slower than this, in milliseconds. -1 disables it. This is
+  # the cheapest way to find the one unindexed facet that is costing you p99.
+  log-slow-requests-time-ms: 500
+
+  # Query aggregation for popular-searches and no-results analytics. Off by
+  # default because it writes an extra collection.
+  # enable-search-analytics: false
+
+  # log-dir is deliberately absent, and stays absent. Typesense does not create
+  # the directory it is pointed at: it exits 1 with "Log directory ... does not
+  # exist" and the pod restart-loops. Unset, it logs to stdout, which is what
+  # `kubectl logs` reads anyway.
+
+cluster:
+  # Raft peering port. Peer traffic is UNENCRYPTED — this is why the chart's
+  # NetworkPolicy only admits peering traffic from the cluster's own pods, and
+  # why this port is never exposed by the client Service or the Ingress.
+  peeringPort: 8107
+
+  # Typesense wants IP ADDRESSES in its nodes file, not hostnames, and pod IPs
+  # change on every reschedule. The sidecar below resolves the headless
+  # Service's DNS — which returns one A record per pod — and rewrites the file
+  # when the set changes. Typesense re-reads it, so peers rejoin without a
+  # restart.
+  #
+  # No Kubernetes API access is involved: it is DNS, which is why this chart
+  # needs no RBAC and no projected ServiceAccount token.
+  peerResolver:
+    # How often to re-resolve, in seconds.
+    intervalSeconds: 5
+    # The init container waits for this many seconds for every replica to get an
+    # IP before writing the first nodes file, so the cluster bootstraps with a
+    # complete peer list instead of a node electing itself into a quorum of one
+    # and reconfiguring afterwards. On timeout it proceeds with whatever it has.
+    bootstrapTimeoutSeconds: 120
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 64Mi
+
+  # Let a node wipe its peer configuration and rejoin when Raft reports an
+  # irrecoverable error. It rescues a cluster that cannot form a quorum after
+  # several nodes were replaced at once — and it can discard data that only the
+  # resetting node still had. Off by default: an unavailable cluster is
+  # recoverable by hand, silently discarded writes are not.
+  resetPeersOnError: false
+
+service:
+  type: ClusterIP
+  port: 8108
+  nodePort: ""
+  annotations: {}
+
+# -----------------------------------------------------------------------------
+# TLS on the API port.
+# -----------------------------------------------------------------------------
+#
+# Worth being precise about what this does and does not cover: it encrypts the
+# CLIENT API port. Raft peering traffic between nodes is unencrypted by design
+# and this setting does not change that — keep peers on a network you trust and
+# rely on the NetworkPolicy below.
+#
+# The Secret must carry tls.crt and tls.key, which is the shape cert-manager
+# writes. The certificate has to cover the names the chart's own clients use:
+# the Service name AND the per-pod headless names, because the backup CronJob
+# addresses one specific node.
+tls:
+  enabled: false
+  existingSecret: ""
+  certKey: tls.crt
+  keyKey: tls.key
+  # Used by the CronJob and the helm test to verify the server. Leave empty for
+  # a certificate signed by a public CA already in the client image's trust
+  # store.
+  caKey: ca.crt
+
+persistence:
+  enabled: true
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  # Typesense keeps the index in MEMORY and uses the disk for durability and
+  # for the Raft log. Size this for the on-disk database plus snapshot headroom,
+  # and size `resources` for the index itself.
+  size: 20Gi
+  annotations: {}
+
+# -----------------------------------------------------------------------------
+# Backups: POST /operations/snapshot on a schedule.
+# -----------------------------------------------------------------------------
+#
+# The thing to understand before configuring this: THE NODE WRITES THE SNAPSHOT,
+# not the CronJob. The API takes a `snapshot_path` that is interpreted inside
+# the Typesense container, so the destination has to be a volume mounted into
+# the Typesense pods. The CronJob only triggers it — and then, if it can reach
+# the same volume, prunes old ones.
+#
+# Restore is a file copy: stop the node, replace the contents of the data
+# directory with a snapshot directory, start it. For a cluster, restore one node
+# and let the others catch up through Raft.
+backup:
+  enabled: false
+  # 03:17 rather than 03:00: every cron example on the internet says 0, and a
+  # cluster where every scheduled job fires on the same tick is a cluster with a
+  # self-inflicted load spike.
+  schedule: "17 3 * * *"
+  # Mount point inside the Typesense container. Each run writes a new
+  # timestamped subdirectory under it.
+  path: /backups
+  # Which node to snapshot, by ordinal. Every member of a Raft quorum holds the
+  # complete dataset, so one is enough and snapshotting all of them would only
+  # multiply the storage. Addressed through its stable per-pod DNS name, so it
+  # is always the same node and the snapshots always land on the same volume.
+  targetOrdinal: 0
+
+  # Where the snapshots go.
+  #
+  #   existingClaim  a ReadWriteMany PVC, mounted by every Typesense pod AND by
+  #                  the CronJob. This is the one that lets retention pruning
+  #                  work, and the only one that puts backups on storage
+  #                  separate from the pod that made them. Recommended.
+  #
+  #   otherwise      each pod gets its own PVC from a volumeClaimTemplate. The
+  #                  CronJob cannot mount a ReadWriteOnce volume that a running
+  #                  pod holds, so pruning is skipped and retention is your
+  #                  storage layer's problem — snapshot the volume, or expire on
+  #                  the storage class.
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 20Gi
+
+  # Delete snapshot directories older than this many days. Only possible with
+  # existingClaim set; ignored otherwise, and NOTES.txt says so after install.
+  # 0 disables pruning.
+  retentionDays: 7
+
+  # A failed backup must be visible. Keeping the last few of each means
+  # `kubectl get jobs` shows the history and the logs are still there.
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  # Do not let a slow snapshot pile up behind the next schedule.
+  concurrencyPolicy: Forbid
+  # Kill a run that has not finished in an hour; the next schedule will try
+  # again, and a snapshot that takes longer than this needs looking at.
+  activeDeadlineSeconds: 3600
+  backoffLimit: 2
+  annotations: {}
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: search.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+# The root filesystem is read-only. Typesense writes to its data directory and
+# to /tmp, and the chart mounts a volume on each.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# Typesense holds the ENTIRE INDEX IN RAM. The memory limit is therefore not a
+# safety net, it is the size of the largest index this will hold — exceed it and
+# the pod is OOMKilled mid-query, and on a Raft cluster that is a node leaving
+# the quorum. Budget roughly the size of your indexed fields, and keep
+# memory-used-max-percentage above as the guard that turns "OOMKill" into
+# "write rejected".
+#
+# thread-pool-size in `config` must be set from the CPU limit; they are one
+# decision, not two.
+resources:
+  requests:
+    cpu: 1
+    memory: 2Gi
+  limits:
+    cpu: 4
+    memory: 8Gi
+
+# /health is unauthenticated by design and returns {"ok":true}. In a quorum it
+# returns 503 until the node has caught up, which is exactly what readiness
+# should reflect.
+startupProbe:
+  enabled: true
+  periodSeconds: 10
+  timeoutSeconds: 5
+  # Up to 10 minutes: on restart a node replays its Raft log and loads every
+  # document back into memory before it answers anything.
+  failureThreshold: 60
+readinessProbe:
+  enabled: true
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+livenessProbe:
+  enabled: true
+  periodSeconds: 20
+  timeoutSeconds: 5
+  # Deliberately slack. A node that is behind on Raft replay is not a node that
+  # needs killing — restarting it throws away the replay it had done.
+  failureThreshold: 10
+
+terminationGracePeriodSeconds: 60
+
+priorityClassName: ""
+nodeSelector: {}
+tolerations: []
+topologySpreadConstraints: []
+affinity: {}
+
+# Applied only when `affinity` above is empty. A three-node quorum with all
+# three pods on one node tolerates zero node failures — which is the entire
+# point of running three.
+#   soft  - prefer separate nodes, schedule anyway if impossible.
+#   hard  - require separate nodes; pods stay Pending rather than colocate.
+#   ""    - no anti-affinity.
+podAntiAffinityPreset: soft
+
+# Enabled automatically for a quorum, where maxUnavailable: 1 is exactly the
+# Raft tolerance and stops a node drain from taking two members at once. It
+# stays off for a single node, where minAvailable would block every drain
+# forever and maxUnavailable: 1 would mean nothing.
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+extraEnv: []
+extraVolumes: []
+extraVolumeMounts: []
+
+networkPolicy:
+  enabled: true
+  #   true  - any pod can reach the API port.
+  #   false - only pods labelled `<fullname>-client: "true"` (in any
+  #           namespace), plus the peers in extraFrom. The backup CronJob and
+  #           the helm test pod already carry that label.
+  #
+  # The peering port is never covered by this: it admits only this release's own
+  # pods, in both settings, because Raft traffic is unauthenticated as well as
+  # unencrypted.
+  allowExternal: true
+  extraFrom: []
+  #  - namespaceSelector:
+  #      matchLabels:
+  #        kubernetes.io/metadata.name: erp
+
+  # Typesense dials its peers and nothing else. Restricting egress to DNS plus
+  # the peering port closes the path a compromised node would use to reach
+  # anything outside the cluster.
+  restrictEgress: false
+  extraEgress: []

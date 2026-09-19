@@ -1,0 +1,312 @@
+{{- include "typesense.validate" . }}
+{{- $fullname := include "typesense.fullname" . }}
+{{- $clustered := include "typesense.clustered" . }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "typesense.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  serviceName: {{ include "typesense.headlessName" . }}
+  updateStrategy:
+    type: RollingUpdate
+  {{- if $clustered }}
+  # Parallel, and it has to be. With OrderedReady the StatefulSet will not
+  # create pod 1 until pod 0 is Ready — but pod 0 cannot become Ready before it
+  # has a Raft quorum, and it cannot get a quorum without its peers. That is a
+  # deadlock the cluster never escapes: the first node sits at 503 forever.
+  podManagementPolicy: Parallel
+  {{- else }}
+  podManagementPolicy: OrderedReady
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "typesense.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "typesense.selectorLabels" . | nindent 8 }}
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        # The config file is assembled from these at start-up and read once, so
+        # a change to either has to restart the pod to mean anything.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if not .Values.auth.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "typesense.serviceAccountName" . }}
+      # The peer resolver uses DNS, not the Kubernetes API, so nothing in this
+      # pod has any use for a token.
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (include "typesense.affinity" .) }}
+      affinity:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: init
+          image: {{ include "typesense.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command: ["/bin/bash", "{{ include "typesense.scriptDir" . }}/init.sh"]
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          resources:
+            {{- toYaml .Values.cluster.peerResolver.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: {{ include "typesense.confDir" . }}
+              readOnly: true
+            - name: scripts
+              mountPath: {{ include "typesense.scriptDir" . }}
+              readOnly: true
+            - name: secrets
+              mountPath: {{ include "typesense.secretDir" . }}
+              readOnly: true
+            - name: runtime
+              mountPath: {{ include "typesense.runtimeDir" . }}
+            {{- if $clustered }}
+            - name: nodes
+              mountPath: {{ include "typesense.nodesDir" . }}
+            {{- end }}
+      containers:
+        - name: typesense
+          image: {{ include "typesense.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          # The image's entrypoint IS the server binary, so these are its flags.
+          # Only the config file is passed: command line beats the config file
+          # in Typesense, and anything overridden here would be invisible to
+          # someone reading the ConfigMap.
+          args:
+            - --config={{ include "typesense.runtimeDir" . }}/typesense-server.ini
+          {{- with .Values.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+            {{- if $clustered }}
+            - name: peering
+              containerPort: {{ .Values.cluster.peeringPort }}
+              protocol: TCP
+            {{- end }}
+          {{- if .Values.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+              scheme: {{ include "typesense.scheme" . | upper }}
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          # /health is unauthenticated by design. In a quorum it returns 503
+          # while the node is behind, which is precisely what should keep it out
+          # of the Service's endpoints.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+              scheme: {{ include "typesense.scheme" . | upper }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.livenessProbe.enabled }}
+          # A TCP check, not /health: a node replaying its Raft log answers 503
+          # and is doing exactly what it should. Killing it there throws away
+          # the replay and starts the same wait again.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: runtime
+              mountPath: {{ include "typesense.runtimeDir" . }}
+              readOnly: true
+            - name: data
+              mountPath: {{ include "typesense.dataDir" . }}
+            {{- if $clustered }}
+            - name: nodes
+              mountPath: {{ include "typesense.nodesDir" . }}
+              readOnly: true
+            {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: tls
+              mountPath: {{ include "typesense.tlsDir" . }}
+              readOnly: true
+            {{- end }}
+            {{- if .Values.backup.enabled }}
+            # The node writes its own snapshots, so the backup volume is mounted
+            # here rather than in the CronJob.
+            - name: backup
+              mountPath: {{ .Values.backup.path }}
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- if $clustered }}
+        - name: peer-resolver
+          image: {{ include "typesense.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command: ["/bin/bash", "{{ include "typesense.scriptDir" . }}/nodes.sh", "watch"]
+          resources:
+            {{- toYaml .Values.cluster.peerResolver.resources | nindent 12 }}
+          volumeMounts:
+            - name: scripts
+              mountPath: {{ include "typesense.scriptDir" . }}
+              readOnly: true
+            - name: nodes
+              mountPath: {{ include "typesense.nodesDir" . }}
+            - name: tmp
+              mountPath: /tmp
+        {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullname }}
+            defaultMode: 0444
+            items:
+              - key: typesense-server.ini
+                path: typesense-server.ini
+        - name: scripts
+          configMap:
+            name: {{ $fullname }}
+            defaultMode: 0555
+            items:
+              - key: init.sh
+                path: init.sh
+              {{- if $clustered }}
+              - key: nodes.sh
+                path: nodes.sh
+              {{- end }}
+        - name: secrets
+          secret:
+            secretName: {{ include "typesense.secretName" . }}
+            # root:fsGroup, readable by the server's user and nothing else.
+            defaultMode: 0440
+        {{- if .Values.tls.enabled }}
+        - name: tls
+          secret:
+            secretName: {{ .Values.tls.existingSecret }}
+            defaultMode: 0440
+        {{- end }}
+        # The assembled config file. Small, and it never leaves the pod.
+        - name: runtime
+          emptyDir:
+            sizeLimit: 1Mi
+        {{- if $clustered }}
+        - name: nodes
+          emptyDir:
+            sizeLimit: 1Mi
+        {{- end }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        {{- if not .Values.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+        {{- if and .Values.backup.enabled .Values.backup.existingClaim }}
+        - name: backup
+          persistentVolumeClaim:
+            claimName: {{ .Values.backup.existingClaim }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+  {{- if or .Values.persistence.enabled (and .Values.backup.enabled (not .Values.backup.existingClaim)) }}
+  volumeClaimTemplates:
+    {{- if .Values.persistence.enabled }}
+    - metadata:
+        name: data
+        labels:
+          {{- include "typesense.selectorLabels" . | nindent 10 }}
+        {{- with .Values.persistence.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.persistence.accessModes | nindent 10 }}
+        {{- with .Values.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | quote }}
+    {{- end }}
+    {{- if and .Values.backup.enabled (not .Values.backup.existingClaim) }}
+    # One backup volume per pod, because no shared claim was given. The CronJob
+    # cannot mount a ReadWriteOnce volume that a running pod holds, so nothing
+    # prunes these — see backup.retentionDays.
+    - metadata:
+        name: backup
+        labels:
+          {{- include "typesense.selectorLabels" . | nindent 10 }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.backup.accessModes | nindent 10 }}
+        {{- with .Values.backup.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.backup.size | quote }}
+    {{- end }}
+  {{- end }}

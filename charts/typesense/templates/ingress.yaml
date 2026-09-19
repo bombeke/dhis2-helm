@@ -1,0 +1,41 @@
+{{- if .Values.ingress.enabled }}
+{{- $fullname := include "typesense.fullname" . }}
+{{- $port := .Values.service.port }}
+# Exposing search to browsers is the normal way to run Typesense — but only
+# with a SEARCH-ONLY key. The bootstrap key in this chart's Secret can delete
+# every collection; it must never reach a browser. Create a scoped key through
+# the /keys API and ship that.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "typesense.labels" . | nindent 4 }}
+  {{- with (merge (deepCopy .Values.ingress.annotations) .Values.commonAnnotations) }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ $fullname }}
+                port:
+                  number: {{ $port }}
+          {{- end }}
+    {{- end }}
+{{- end }}

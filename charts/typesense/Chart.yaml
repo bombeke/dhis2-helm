@@ -1,0 +1,27 @@
+annotations:
+  category: Search
+  licenses: GPL-3.0
+  images: |
+    - name: typesense
+      image: docker.io/typesense/typesense:30.2
+    - name: curl
+      image: docker.io/curlimages/curl:8.11.1
+
+apiVersion: v2
+name: typesense
+description: >-
+  Typesense — full-text and faceted search — as a single node or a Raft
+  quorum, with the peer list resolved from headless-service DNS, the bootstrap
+  API key held in a Secret, and optional scheduled snapshot backups.
+type: application
+keywords:
+  - typesense
+  - search
+  - full-text
+  - faceted-search
+
+# Replaces the byod-manager chart, which was the unmodified `helm create`
+# scaffold. Not an in-place upgrade: every resource name and kind changes, and
+# a Deployment cannot become a StatefulSet.
+version: 0.1.0
+appVersion: "30.2"

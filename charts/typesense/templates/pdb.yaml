@@ -1,0 +1,23 @@
+{{- if and .Values.podDisruptionBudget.enabled (include "typesense.clustered" .) }}
+# Only for a quorum. On a single node, maxUnavailable: 1 permits exactly the
+# eviction it was meant to guard and minAvailable: 1 blocks every node drain
+# forever — neither is worth creating.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "typesense.fullname" . }}
+  labels:
+    {{- include "typesense.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  # Exactly the Raft tolerance for a 3-node cluster, and the thing that stops a
+  # cluster-wide node drain from evicting two members at once and losing the
+  # quorum.
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "typesense.selectorLabels" . | nindent 6 }}
+{{- end }}

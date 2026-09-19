@@ -1,0 +1,179 @@
+{{- include "typesense.validate" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "typesense.fullname" . }}
+  labels:
+    {{- include "typesense.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  typesense-server.ini: |
+    {{- include "typesense.serverIni" . | nindent 4 }}
+
+  # Assembles the real config file into an emptyDir at start-up. Two of its
+  # lines cannot exist in a ConfigMap: `api-key`, which is a secret, and
+  # `peering-address`, which is this pod's IP and is therefore not known until
+  # the pod is scheduled.
+  #
+  # The alternative — passing the key as TYPESENSE_API_KEY — would put an admin
+  # credential in the pod environment, where `kubectl describe pod`,
+  # /proc/1/environ and every crash dump can read it. Typesense reads the
+  # config file at a higher precedence than the environment anyway.
+  init.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    runtime={{ include "typesense.runtimeDir" . }}/typesense-server.ini
+    install -m 0600 {{ include "typesense.confDir" . }}/typesense-server.ini "$runtime"
+    {
+      printf 'api-key = %s\n' "$(cat {{ include "typesense.secretDir" . }}/api-key)"
+      printf 'peering-address = %s\n' "$POD_IP"
+    } >> "$runtime"
+    # Read-only from here on: nothing in the main container needs to write it,
+    # and a config file it cannot modify is one less thing a compromise can do.
+    chmod 0400 "$runtime"
+    echo "config assembled for peering-address=$POD_IP"
+    {{- if include "typesense.clustered" . }}
+
+    # Block until the peer list is complete, so the cluster bootstraps with
+    # every member present rather than one node electing itself into a quorum
+    # of one and reconfiguring after the fact.
+    exec {{ include "typesense.scriptDir" . }}/nodes.sh bootstrap
+    {{- end }}
+  {{- if include "typesense.clustered" . }}
+
+  # Typesense wants IP ADDRESSES in its nodes file, not hostnames, and pod IPs
+  # change on every reschedule. This resolves the headless Service — whose A
+  # record holds one address per pod — and rewrites the file when the set
+  # changes. Typesense re-reads it, so a rescheduled peer rejoins without a
+  # restart of anything.
+  #
+  # It is DNS, not the Kubernetes API: no RBAC, no projected ServiceAccount
+  # token, nothing for a compromised sidecar to escalate with.
+  nodes.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    mode="${1:-watch}"
+    headless={{ include "typesense.headlessHost" . | quote }}
+    expected={{ .Values.replicaCount }}
+    target={{ include "typesense.nodesFile" . }}
+    interval={{ .Values.cluster.peerResolver.intervalSeconds }}
+    bootstrap_timeout={{ .Values.cluster.peerResolver.bootstrapTimeoutSeconds }}
+
+    # getent returns one line per socket type per address, hence sort -u. It is
+    # glibc, present in this Debian-based image, and needs no extra package.
+    resolve() { getent ahostsv4 "$headless" | cut -d' ' -f1 | sort -u; }
+
+    render() {
+      local entries="" ip
+      for ip in $(resolve); do
+        entries="${entries:+$entries,}${ip}:{{ .Values.cluster.peeringPort }}:{{ .Values.service.port }}"
+      done
+      printf '%s' "$entries"
+    }
+
+    publish() {
+      local entries="$1"
+      [ -n "$entries" ] || return 1
+      if [ "$entries" != "$(cat "$target" 2>/dev/null || true)" ]; then
+        # Write then rename. Typesense polls this file, and a partially written
+        # one is a peer list with a truncated address in it.
+        printf '%s' "$entries" > "${target}.tmp"
+        mv -f "${target}.tmp" "$target"
+        echo "nodes -> $entries"
+      fi
+    }
+
+    case "$mode" in
+      bootstrap)
+        deadline=$(( SECONDS + bootstrap_timeout ))
+        while :; do
+          count="$(resolve | grep -c . || true)"
+          if [ "$count" -ge "$expected" ]; then
+            publish "$(render)"
+            echo "peers complete ($count/$expected)"
+            exit 0
+          fi
+          if [ "$SECONDS" -ge "$deadline" ]; then
+            echo "timed out waiting for peers ($count/$expected); starting with what resolved"
+            publish "$(render)" || { echo "no peer resolved at all; check the headless Service"; exit 1; }
+            exit 0
+          fi
+          sleep 2
+        done
+        ;;
+      watch)
+        while :; do
+          publish "$(render)" || true
+          sleep "$interval"
+        done
+        ;;
+      *)
+        echo "usage: nodes.sh bootstrap|watch" >&2
+        exit 64
+        ;;
+    esac
+  {{- end }}
+{{- if .Values.backup.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "typesense.fullname" . }}-backup
+  labels:
+    {{- include "typesense.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  # POST /operations/snapshot. Worth restating, because it decides where the
+  # volume has to be mounted: THE NODE WRITES THE SNAPSHOT. snapshot_path is a
+  # path inside the Typesense container, and this Job only asks for it.
+  backup.sh: |
+    #!/bin/sh
+    set -eu
+
+    stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    dest="${BACKUP_PATH}/${stamp}"
+
+    # The key goes in a curl config file rather than -H, so it is not in this
+    # process's argv where anything sharing the pod could read it.
+    umask 077
+    printf 'header = "X-TYPESENSE-API-KEY: %s"\n' "$(cat {{ include "typesense.secretDir" . }}/api-key)" > /tmp/curlrc
+
+    echo "snapshot ${TARGET_URL} -> ${dest}"
+    code="$(curl --config /tmp/curlrc {{ include "typesense.curlCaFlag" . }} \
+      --silent --show-error --fail-with-body \
+      --retry 3 --retry-delay 5 --max-time 1800 \
+      --output /tmp/response.json --write-out '%{http_code}' \
+      -X POST "${TARGET_URL}/operations/snapshot?snapshot_path=${dest}")" || true
+
+    echo "HTTP ${code}: $(cat /tmp/response.json 2>/dev/null || echo '<no body>')"
+    case "${code}" in
+      200) ;;
+      *) echo "snapshot failed"; exit 1 ;;
+    esac
+    # A 200 with success:false is still a failed backup, and the one thing worse
+    # than no backup is a backup job that reports green without one.
+    grep -q '"success":[[:space:]]*true' /tmp/response.json || {
+      echo "snapshot reported failure"; exit 1; }
+    echo "snapshot complete: ${dest}"
+
+    # Pruning needs this Job to see the same filesystem the node wrote to,
+    # which only happens with a ReadWriteMany backup.existingClaim. Without one
+    # the directory is not mounted here at all and this is a no-op by
+    # construction rather than by a flag.
+    if [ "${RETENTION_DAYS}" -gt 0 ] && [ -w "${BACKUP_PATH}" ]; then
+      echo "pruning snapshots older than ${RETENTION_DAYS} days"
+      find "${BACKUP_PATH}" -mindepth 1 -maxdepth 1 -type d -mtime "+${RETENTION_DAYS}" \
+        -exec rm -rf {} + 2>/dev/null || true
+      ls -1 "${BACKUP_PATH}" 2>/dev/null | sed 's/^/  kept: /' || true
+    else
+      echo "retention: not pruning (needs backup.existingClaim and retentionDays > 0)"
+    fi
+{{- end }}

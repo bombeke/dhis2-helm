@@ -1,0 +1,120 @@
+{{- if .Values.backup.enabled }}
+{{- $fullname := include "typesense.fullname" . }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullname }}-backup
+  labels:
+    {{- include "typesense.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+  {{- with (merge (deepCopy .Values.backup.annotations) .Values.commonAnnotations) }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: {{ .Values.backup.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ .Values.backup.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.backup.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.backup.backoffLimit }}
+      activeDeadlineSeconds: {{ .Values.backup.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            {{- include "typesense.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: backup
+            # Lets the Job through the NetworkPolicy when allowExternal is false.
+            {{ include "typesense.clientLabel" . }}: "true"
+            {{- with .Values.commonLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        spec:
+          restartPolicy: OnFailure
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "typesense.serviceAccountName" . }}
+          automountServiceAccountToken: false
+          enableServiceLinks: false
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: snapshot
+              # The Typesense image ships neither curl nor wget, and its
+              # /bin/sh is dash, so it cannot make an HTTP request at all
+              # without contortions. This is the one job that needs a client.
+              image: {{ include "typesense.clientImage" . }}
+              imagePullPolicy: {{ .Values.clientImage.pullPolicy }}
+              securityContext:
+                {{- toYaml .Values.securityContext | nindent 16 }}
+              command: ["/bin/sh", "{{ include "typesense.scriptDir" . }}/backup.sh"]
+              env:
+                # One specific node, by its stable per-pod name. Every member of
+                # a Raft quorum has the whole dataset, so snapshotting one is a
+                # complete backup — and addressing the Service instead would
+                # scatter snapshots across whichever node answered.
+                - name: TARGET_URL
+                  value: {{ printf "%s://%s-%d.%s:%d" (include "typesense.scheme" .) $fullname (int .Values.backup.targetOrdinal) (include "typesense.headlessHost" .) (int .Values.service.port) | quote }}
+                - name: BACKUP_PATH
+                  value: {{ .Values.backup.path | quote }}
+                - name: RETENTION_DAYS
+                  value: {{ .Values.backup.retentionDays | quote }}
+                - name: HOME
+                  value: /tmp
+              resources:
+                {{- toYaml .Values.backup.resources | nindent 16 }}
+              volumeMounts:
+                - name: scripts
+                  mountPath: {{ include "typesense.scriptDir" . }}
+                  readOnly: true
+                - name: secrets
+                  mountPath: {{ include "typesense.secretDir" . }}
+                  readOnly: true
+                {{- if .Values.tls.enabled }}
+                - name: tls
+                  mountPath: {{ include "typesense.tlsDir" . }}
+                  readOnly: true
+                {{- end }}
+                {{- if .Values.backup.existingClaim }}
+                # Mounted only for a shared claim. This is what makes retention
+                # pruning possible: the Job has to see the files the node wrote.
+                - name: backup
+                  mountPath: {{ .Values.backup.path }}
+                {{- end }}
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: scripts
+              configMap:
+                name: {{ $fullname }}-backup
+                defaultMode: 0555
+            - name: secrets
+              secret:
+                secretName: {{ include "typesense.secretName" . }}
+                defaultMode: 0440
+            {{- if .Values.tls.enabled }}
+            - name: tls
+              secret:
+                secretName: {{ .Values.tls.existingSecret }}
+                defaultMode: 0440
+            {{- end }}
+            {{- if .Values.backup.existingClaim }}
+            - name: backup
+              persistentVolumeClaim:
+                claimName: {{ .Values.backup.existingClaim }}
+            {{- end }}
+            - name: tmp
+              emptyDir:
+                sizeLimit: 16Mi
+{{- end }}
