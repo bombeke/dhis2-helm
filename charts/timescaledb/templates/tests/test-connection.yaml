@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "timescaledb.fullname" . }}-test-connection
+  labels:
+    {{- include "timescaledb.labels" . | nindent 4 }}
+    # Lets the pod through the NetworkPolicy when allowExternal is false.
+    {{ include "timescaledb.clientLabel" . }}: "true"
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  securityContext:
+    {{- toYaml .Values.podSecurityContext | nindent 4 }}
+  containers:
+    - name: psql
+      image: {{ include "timescaledb.image" . }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      # Log in through the Service and ask the server what it loaded. This
+      # checks the network path, the Service, the credentials, and — the part
+      # worth testing — that timescaledb is in shared_preload_libraries rather
+      # than merely installed. An extension that is present but not preloaded
+      # answers every query correctly right up until it has to plan one.
+      command:
+        - /bin/bash
+        - -ec
+        - |
+          export PGPASSWORD="$(cat {{ include "timescaledb.secretDir" . }}/postgres-password)"
+          {{- include "timescaledb.clientCertSetup" . | nindent 10 }}
+          psql -v ON_ERROR_STOP=1 -qAtX \
+            "postgresql://${PGUSER}@{{ include "timescaledb.serviceHost" . }}:{{ .Values.service.port }}/${PGDATABASE}?sslmode={{ include "timescaledb.sslMode" . }}" <<'SQL'
+          SELECT 'server: ' || version();
+          SELECT 'preloaded: ' || current_setting('shared_preload_libraries');
+          SELECT 'extension: ' || extname || ' ' || extversion FROM pg_extension ORDER BY extname;
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
+              RAISE EXCEPTION 'timescaledb extension is not installed';
+            END IF;
+            IF current_setting('shared_preload_libraries') NOT LIKE '%timescaledb%' THEN
+              RAISE EXCEPTION 'timescaledb is installed but not preloaded; it will not hook the planner';
+            END IF;
+          END
+          $$;
+          SQL
+      env:
+        - name: PGUSER
+          value: {{ .Values.auth.username | quote }}
+        - name: PGDATABASE
+          value: {{ .Values.auth.database | quote }}
+        - name: HOME
+          value: /tmp
+      volumeMounts:
+        - name: secrets
+          mountPath: {{ include "timescaledb.secretDir" . }}
+          readOnly: true
+        {{- include "timescaledb.clientCertMount" . | nindent 8 }}
+        - name: tmp
+          mountPath: /tmp
+  volumes:
+    - name: secrets
+      secret:
+        secretName: {{ include "timescaledb.secretName" . }}
+        defaultMode: 0440
+    {{- include "timescaledb.clientCertVolume" . | nindent 4 }}
+    - name: tmp
+      emptyDir:
+        sizeLimit: 64Mi

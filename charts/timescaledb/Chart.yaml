@@ -1,0 +1,23 @@
+annotations:
+  category: Database
+  licenses: PostgreSQL AND Apache-2.0 AND TSL
+  images: |
+    - name: timescaledb
+      image: docker.io/timescale/timescaledb-ha:pg18.4-ts2.29.0
+
+apiVersion: v2
+name: timescaledb
+description: >-
+  PostgreSQL 18 with TimescaleDB, timescaledb_toolkit and PostGIS on the
+  timescale/timescaledb-ha image, running as a single tuned node with
+  authentication, TLS and persistent storage.
+type: application
+keywords:
+  - timescaledb
+  - postgresql
+  - postgis
+  - timeseries
+  - database
+
+version: 0.1.0
+appVersion: "18.4"

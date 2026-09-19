@@ -287,7 +287,7 @@ clickstack:
     enabled: false
 
   clickhouse:
-    image: "clickhouse/clickhouse-server:24-alpine"
+    image: "clickhouse/clickhouse-server:25.8.28"
     port: 8123
     nativePort: 9000
     enabled: true

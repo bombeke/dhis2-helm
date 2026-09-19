@@ -1,0 +1,166 @@
+{{- include "timescaledb.validate" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "timescaledb.fullname" . }}
+  labels:
+    {{- include "timescaledb.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  postgresql.conf: |
+    {{- include "timescaledb.postgresqlConf" . | nindent 4 }}
+  pg_hba.conf: |
+    {{- include "timescaledb.pgHba" . | nindent 4 }}
+  # Referenced by ident_file. Empty, and it has to exist: `hba_file` moves
+  # pg_hba.conf out of the data directory, and `ident_file` defaults to sitting
+  # beside the config file, so a missing pg_ident.conf is a startup failure
+  # rather than a fallback.
+  pg_ident.conf: |
+    # MAPNAME  SYSTEM-USERNAME  PG-USERNAME
+---
+# First-start scripts. The image entrypoint runs these ONCE, against an empty
+# data directory, in file-name order, using a TEMPORARY server that does not
+# load this chart's postgresql.conf. They do not re-run against an existing
+# PVC; deleting the PVC is what makes them take effect again.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "timescaledb.fullname" . }}-initdb
+  labels:
+    {{- include "timescaledb.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  {{- range $name, $script := .Values.initdb.scripts }}
+  {{ $name }}: |
+    {{- $script | nindent 4 }}
+  {{- end }}
+{{- if .Values.bootstrap.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "timescaledb.fullname" . }}-bootstrap
+  labels:
+    {{- include "timescaledb.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  bootstrap.sh: |
+    #!/usr/bin/env bash
+    # Runs against the REAL server, after it is up, on every install and
+    # upgrade. Everything here is idempotent by construction, which is what
+    # makes `helm upgrade` double as the repair path.
+    set -euo pipefail
+
+    export PGHOST={{ include "timescaledb.serviceHost" . | quote }}
+    export PGPORT={{ .Values.service.port | quote }}
+    export PGUSER={{ .Values.auth.username | quote }}
+    export PGDATABASE={{ .Values.auth.database | quote }}
+    export PGSSLMODE={{ include "timescaledb.sslMode" . | quote }}
+    export PGCONNECT_TIMEOUT=10
+    # Read from the mounted Secret, never from an env var set by the manifest.
+    export PGPASSWORD="$(cat {{ include "timescaledb.secretDir" . }}/postgres-password)"
+    {{- include "timescaledb.clientCertSetup" . | nindent 4 }}
+
+    run() { psql -v ON_ERROR_STOP=1 -qAtX "$@"; }
+
+    # The Job is created by a post-install hook, which does not wait for the
+    # StatefulSet to become ready. First boot of this image is genuinely slow
+    # (initdb, PostGIS, the init scripts), so wait rather than fail and let
+    # backoffLimit paper over it.
+    echo "waiting for ${PGHOST}:${PGPORT} ..."
+    for _ in $(seq 1 150); do
+      pg_isready -q && break
+      sleep 4
+    done
+    pg_isready || { echo "server never became ready"; exit 1; }
+
+    # Each extension gets a session of its own. That is a requirement, not a
+    # style choice: `ALTER EXTENSION timescaledb UPDATE` must be the first
+    # statement of its session, and it is the statement that reconciles the
+    # SQL-side extension with the .so the server actually loaded after an image
+    # bump. Skipping it leaves the two at different versions, which surfaces
+    # later as a function that exists in one and not the other.
+    {{- range .Values.bootstrap.extensions }}
+    echo "extension {{ . }}"
+    run -c 'CREATE EXTENSION IF NOT EXISTS "{{ . }}" CASCADE'
+    run -c 'ALTER EXTENSION "{{ . }}" UPDATE'
+    {{- end }}
+
+    # Re-apply the superuser password from the Secret, so rotating it is
+    # "change the Secret, helm upgrade" rather than a manual psql session.
+    # initdb only ever sets it once, on first boot.
+    run -v pw="$PGPASSWORD" -f {{ include "timescaledb.bootstrapDir" . }}/superuser.sql
+    {{- if .Values.auth.appUsername }}
+
+    echo "role {{ .Values.auth.appUsername }}"
+    # The password reaches psql as a variable and is interpolated with :'pw',
+    # which applies SQL literal quoting — the role name and password are never
+    # pasted into a SQL string by the shell.
+    run -v role={{ .Values.auth.appUsername | quote }} \
+        -v db="$PGDATABASE" \
+        -v pw="$(cat {{ include "timescaledb.secretDir" . }}/app-password)" \
+        -f {{ include "timescaledb.bootstrapDir" . }}/app-role.sql
+    {{- end }}
+    {{- if .Values.bootstrap.revokePublicConnect }}
+
+    # PUBLIC holds CONNECT on every new database, so any role that exists at
+    # all can open a connection to this one. Revoking makes the grant list
+    # explicit. Superusers bypass it; the app role was granted CONNECT above.
+    # The database name is interpolated by Helm, not by psql: variable
+    # substitution in `-c` is not something to rely on across psql versions.
+    run -c 'REVOKE CONNECT ON DATABASE "{{ .Values.auth.database }}" FROM PUBLIC'
+    {{- end }}
+    {{- if .Values.bootstrap.extraSql }}
+
+    echo "extra SQL"
+    run -f {{ include "timescaledb.bootstrapDir" . }}/extra.sql
+    {{- end }}
+
+    echo "bootstrap complete"
+
+  superuser.sql: |
+    -- Keep the password out of the server log, whatever log_statement and
+    -- log_min_duration_statement are set to for everyone else.
+    SET log_statement = 'none';
+    SET log_min_duration_statement = -1;
+    SELECT format('ALTER ROLE %I WITH PASSWORD %L', current_user, :'pw')
+    \gexec
+
+  {{- if .Values.auth.appUsername }}
+  app-role.sql: |
+    SET log_statement = 'none';
+    SET log_min_duration_statement = -1;
+
+    -- CREATE ROLE has no IF NOT EXISTS, so the existence test is the WHERE
+    -- clause and \gexec runs the zero or one rows it produces.
+    SELECT format('CREATE ROLE %I WITH LOGIN PASSWORD %L', :'role', :'pw')
+    WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'role')
+    \gexec
+
+    -- Unconditionally re-apply the password, so the Secret is the source of
+    -- truth on every upgrade rather than only on the day the role was created.
+    SELECT format('ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB PASSWORD %L', :'role', :'pw')
+    \gexec
+
+    -- Enough to run an application: connect, use temp tables, and own objects
+    -- in the public schema. Not enough to create databases, roles, or
+    -- extensions — those are this Job's job.
+    SELECT format('GRANT CONNECT, TEMPORARY ON DATABASE %I TO %I', :'db', :'role')
+    \gexec
+    SELECT format('GRANT USAGE, CREATE ON SCHEMA public TO %I', :'role')
+    \gexec
+  {{- end }}
+  {{- with .Values.bootstrap.extraSql }}
+  extra.sql: |
+    {{- . | nindent 4 }}
+  {{- end }}
+{{- end }}

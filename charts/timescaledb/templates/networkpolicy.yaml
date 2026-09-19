@@ -1,0 +1,50 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "timescaledb.fullname" . }}
+  labels:
+    {{- include "timescaledb.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "timescaledb.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    {{- if .Values.networkPolicy.restrictEgress }}
+    - Egress
+    {{- end }}
+  ingress:
+    - ports:
+        - port: postgresql
+          protocol: TCP
+      {{- if not .Values.networkPolicy.allowExternal }}
+      from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              {{ include "timescaledb.clientLabel" . }}: "true"
+        {{- with .Values.networkPolicy.extraFrom }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+  {{- if .Values.networkPolicy.restrictEgress }}
+  egress:
+    # DNS only. A database initiates nothing on its own, so denying egress
+    # closes the exfiltration path that a SQL-level compromise would otherwise
+    # have — no COPY TO PROGRAM calling out, no extension dialling home. DNS
+    # stays open because libpq and the extensions still resolve names.
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- with .Values.networkPolicy.extraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+{{- end }}

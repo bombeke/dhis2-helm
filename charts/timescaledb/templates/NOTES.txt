@@ -1,0 +1,56 @@
+PostgreSQL {{ .Chart.AppVersion }} with TimescaleDB is starting.
+
+In-cluster address:
+  {{ include "timescaledb.serviceHost" . }}:{{ .Values.service.port }}
+  database "{{ .Values.auth.database }}", sslmode={{ include "timescaledb.sslMode" . }}
+
+Superuser "{{ .Values.auth.username }}". Get the password with:
+  kubectl get secret --namespace {{ .Release.Namespace }} {{ include "timescaledb.secretName" . }} \
+    -o jsonpath='{.data.postgres-password}' | base64 -d
+{{- if .Values.auth.appUsername }}
+
+Application role "{{ .Values.auth.appUsername }}" — use this one from your
+services, not the superuser.
+{{- if not .Values.auth.existingSecret }}
+A ready-made connection URI is in the same Secret, for apps to mount directly:
+  secretKeyRef: { name: {{ include "timescaledb.secretName" . }}, key: uri }
+{{- end }}
+{{- end }}
+
+Open a shell. pg_hba is scram-sha-256 everywhere, including the local socket,
+so this needs the password even from inside the pod:
+  kubectl exec -it --namespace {{ .Release.Namespace }} {{ include "timescaledb.fullname" . }}-0 -- \
+    env PGPASSWORD="$(kubectl get secret -n {{ .Release.Namespace }} {{ include "timescaledb.secretName" . }} -o jsonpath='{.data.postgres-password}' | base64 -d)" \
+    psql -U {{ .Values.auth.username }} -d {{ .Values.auth.database }}
+
+Connect from your machine:
+  kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "timescaledb.fullname" . }} 5432:{{ .Values.service.port }}
+  psql "postgresql://{{ .Values.auth.username }}@localhost:5432/{{ .Values.auth.database }}"
+{{- if .Values.bootstrap.enabled }}
+
+Extensions installed by the bootstrap Job: {{ join ", " .Values.bootstrap.extensions }}.
+It runs again on every `helm upgrade` and is idempotent, so it is also the
+repair path: a dropped role or a missing extension comes back with an upgrade.
+Check what it did:
+  kubectl logs --namespace {{ .Release.Namespace }} job/{{ include "timescaledb.fullname" . }}-bootstrap
+{{- end }}
+{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.allowExternal) }}
+
+The NetworkPolicy only lets labelled pods connect. Add this to client pods:
+  {{ include "timescaledb.clientLabel" . }}: "true"
+{{- end }}
+{{- if not .Values.tls.enabled }}
+
+TLS is OFF: connections cross the cluster network in plaintext, and anything
+that can read pod-to-pod traffic can read the scram exchange and every row that
+follows. Set tls.enabled with a cert-manager Certificate to turn it on; the
+chart then switches pg_hba to `hostssl`, which refuses plaintext outright.
+{{- end }}
+{{- if not .Values.persistence.enabled }}
+
+WARNING: persistence is disabled. All data is lost when the pod is deleted.
+{{- end }}
+
+Remember what is NOT here: this is a single node with no replica and no WAL
+archiving. A PersistentVolume is not a backup. Schedule pg_dump or pgBackRest
+against it before it holds anything you would miss.

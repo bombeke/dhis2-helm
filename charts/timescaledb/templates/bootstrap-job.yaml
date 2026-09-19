@@ -1,0 +1,93 @@
+{{- if .Values.bootstrap.enabled }}
+{{- $fullname := include "timescaledb.fullname" . }}
+# Creates the extensions and the application role against the RUNNING server,
+# not during initdb. That distinction is the whole point of this Job:
+# `CREATE EXTENSION timescaledb` requires the library to be preloaded, and the
+# temporary server the image entrypoint uses for /docker-entrypoint-initdb.d
+# does not load this chart's postgresql.conf. Putting it here also makes it run
+# on every upgrade, so an image bump reconciles the SQL-side extension with the
+# .so that the new server actually loaded.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $fullname }}-bootstrap
+  labels:
+    {{- include "timescaledb.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    # After the StatefulSet and its Secret exist.
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- with .Values.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  backoffLimit: {{ .Values.bootstrap.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "timescaledb.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: bootstrap
+        # Lets the Job through the NetworkPolicy when allowExternal is false.
+        {{ include "timescaledb.clientLabel" . }}: "true"
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "timescaledb.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: bootstrap
+          # The same image, because it is the one that ships a psql matching the
+          # server. A mismatched client is a needless source of "unsupported
+          # frontend protocol" during a major-version bump.
+          image: {{ include "timescaledb.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command: ["/bin/bash", "{{ include "timescaledb.bootstrapDir" . }}/bootstrap.sh"]
+          env:
+            - name: HOME
+              value: /tmp
+          resources:
+            {{- toYaml .Values.bootstrap.resources | nindent 12 }}
+          volumeMounts:
+            - name: bootstrap
+              mountPath: {{ include "timescaledb.bootstrapDir" . }}
+              readOnly: true
+            - name: secrets
+              mountPath: {{ include "timescaledb.secretDir" . }}
+              readOnly: true
+            {{- include "timescaledb.clientCertMount" . | nindent 12 }}
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: {{ $fullname }}-bootstrap
+            defaultMode: 0555
+        - name: secrets
+          secret:
+            secretName: {{ include "timescaledb.secretName" . }}
+            defaultMode: 0440
+        {{- include "timescaledb.clientCertVolume" . | nindent 8 }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+{{- end }}

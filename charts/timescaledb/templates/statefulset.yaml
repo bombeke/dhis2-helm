@@ -1,0 +1,274 @@
+{{- include "timescaledb.validate" . }}
+{{- $fullname := include "timescaledb.fullname" . }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "timescaledb.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  # Single node. A second pod would be a second, unrelated database with its own
+  # PVC, not a replica — nothing in this chart sets up replication.
+  replicas: 1
+  serviceName: {{ include "timescaledb.headlessName" . }}
+  updateStrategy:
+    type: RollingUpdate
+  # The old pod must be fully gone before its replacement starts. Two
+  # postmasters on one data directory is the failure this guards against.
+  podManagementPolicy: OrderedReady
+  selector:
+    matchLabels:
+      {{- include "timescaledb.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "timescaledb.selectorLabels" . | nindent 8 }}
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        # postgresql.conf and pg_hba.conf are read at startup, so a change to
+        # either has to restart the pod to take effect. Without this checksum
+        # the ConfigMap would update in place and the running server would keep
+        # serving the old settings indefinitely, with nothing to show for it.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if not .Values.auth.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "timescaledb.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      # Kubernetes would otherwise inject a variable per Service in the
+      # namespace. The image's entrypoint reads POSTGRES_*, so a Service named
+      # `postgres` next door is enough to hand it POSTGRES_PORT=tcp://10.0.0.1:5432
+      # where it expects a port number.
+      enableServiceLinks: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: timescaledb
+          image: {{ include "timescaledb.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          # The image entrypoint runs initdb, creates the superuser and runs the
+          # init scripts on first boot against a temporary server, then execs
+          # these args. `config_file` is what lets postgresql.conf live in a
+          # read-only ConfigMap instead of inside the data directory. Moving it
+          # also moves where hba_file and ident_file are looked for, which is
+          # why postgresql.conf sets both explicitly.
+          args:
+            - postgres
+            - -c
+            - config_file={{ include "timescaledb.confDir" . }}/postgresql.conf
+          env:
+            # Read by the entrypoint on FIRST BOOT only. The _FILE form keeps
+            # the password out of the environment, where it would otherwise sit
+            # in `kubectl describe pod`, in /proc/1/environ for anything sharing
+            # the pod, and in any core dump.
+            - name: POSTGRES_USER
+              value: {{ .Values.auth.username | quote }}
+            - name: POSTGRES_PASSWORD_FILE
+              value: {{ include "timescaledb.secretDir" . }}/postgres-password
+            - name: POSTGRES_DB
+              value: {{ .Values.auth.database | quote }}
+            - name: POSTGRES_INITDB_ARGS
+              value: {{ .Values.initdb.args | quote }}
+            # Belt and braces: even in the brief window where the temporary init
+            # server runs with the data directory's own pg_hba.conf rather than
+            # this chart's, nothing is trusted.
+            - name: POSTGRES_HOST_AUTH_METHOD
+              value: scram-sha-256
+            # PGDATA is a SUBDIRECTORY of the mount point. initdb refuses a
+            # directory that is not empty, and a freshly provisioned PVC often
+            # is not — lost+found is enough to fail the whole first boot.
+            - name: PGDATA
+              value: {{ include "timescaledb.pgdata" . }}
+            # The image's home is /home/postgres, which is on the read-only root
+            # filesystem. psql and the entrypoint's own tooling write state
+            # under HOME; point it at the writable emptyDir.
+            - name: HOME
+              value: /tmp
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: postgresql
+              containerPort: {{ .Values.containerPort }}
+              protocol: TCP
+          {{- if .Values.startupProbe.enabled }}
+          startupProbe:
+            exec:
+              command: {{ include "timescaledb.probeCommand" . }}
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            exec:
+              command: {{ include "timescaledb.probeCommand" . }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.livenessProbe.enabled }}
+          # Liveness is a TCP check on purpose. A probe that ran a query would
+          # kill a server that is merely busy, or mid-recovery — the one moment
+          # when restarting it makes things strictly worse.
+          livenessProbe:
+            tcpSocket:
+              port: postgresql
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          {{- end }}
+          lifecycle:
+            preStop:
+              exec:
+                # SIGTERM to postgres is a SMART shutdown: it waits for every
+                # client to disconnect of its own accord, which behind a
+                # connection pool means it waits out the grace period and is
+                # SIGKILLed — turning every rollout into crash recovery on the
+                # next start. `-m fast` refuses new connections, rolls back the
+                # open ones, checkpoints, and exits clean.
+                command:
+                  - /bin/sh
+                  - -ec
+                  - pg_ctl -D "$PGDATA" -m fast -w -t {{ sub .Values.terminationGracePeriodSeconds 10 }} stop
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: {{ include "timescaledb.confDir" . }}
+              readOnly: true
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            - name: secrets
+              mountPath: {{ include "timescaledb.secretDir" . }}
+              readOnly: true
+            {{- if .Values.tls.enabled }}
+            - name: tls
+              mountPath: {{ include "timescaledb.tlsDir" . }}
+              readOnly: true
+            {{- end }}
+            - name: data
+              mountPath: {{ include "timescaledb.dataMount" . }}
+            # The unix socket and postmaster.pid live here, and the root
+            # filesystem is read-only.
+            - name: run
+              mountPath: {{ include "timescaledb.socketDir" . }}
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.shmVolume.enabled }}
+            # Parallel workers exchange tuples through POSIX shared memory. The
+            # default 64MB /dev/shm fails a parallel query at RUN time, after
+            # planning, with "could not resize shared memory segment".
+            - name: dshm
+              mountPath: /dev/shm
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullname }}
+            defaultMode: 0444
+        - name: initdb
+          configMap:
+            name: {{ $fullname }}-initdb
+            # The entrypoint executes *.sh from this directory directly.
+            defaultMode: 0555
+        - name: secrets
+          secret:
+            secretName: {{ include "timescaledb.secretName" . }}
+            # root:fsGroup, readable by the postgres user and nothing else.
+            defaultMode: 0440
+        {{- if .Values.tls.enabled }}
+        - name: tls
+          secret:
+            secretName: {{ .Values.tls.existingSecret }}
+            # PostgreSQL refuses to start if the private key is world-readable,
+            # or group-readable while owned by a non-root user. root:fsGroup at
+            # 0440 is the one combination it accepts and the server can read.
+            defaultMode: 0440
+        {{- end }}
+        - name: run
+          emptyDir:
+            sizeLimit: 16Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi
+        {{- if .Values.shmVolume.enabled }}
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.shmVolume.sizeLimit }}
+        {{- end }}
+        {{- if not .Values.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- else if .Values.persistence.existingClaim }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+  {{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "timescaledb.selectorLabels" . | nindent 10 }}
+        {{- with .Values.persistence.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.persistence.accessModes | nindent 10 }}
+        {{- with .Values.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | quote }}
+  {{- end }}
