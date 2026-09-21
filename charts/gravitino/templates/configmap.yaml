@@ -1,0 +1,122 @@
+{{- include "gravitino.validate" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "gravitino.fullname" . }}
+  labels:
+    {{- include "gravitino.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  gravitino-iceberg-rest-server.conf: |
+    {{- include "gravitino.serverConf" . | nindent 4 }}
+
+  log4j2.properties: |
+    {{- include "gravitino.log4j2" . | nindent 4 }}
+
+  # Joins the ConfigMap's config file and the Secret's files into one, in an
+  # emptyDir. The config format is a Java properties file with no environment
+  # interpolation of its own, and the alternative — secrets as env vars
+  # substituted by the image's rewrite_config.py — would put the S3 secret and
+  # the database password in the pod spec's environment, where `kubectl
+  # describe pod`, /proc/1/environ and every crash dump can read them.
+  #
+  # Each Secret file is NAMED after the property it sets, so this script needs
+  # no knowledge of which ones exist.
+  init.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+    umask 077
+
+    src={{ include "gravitino.confDir" . }}
+    secrets={{ include "gravitino.secretDir" . }}
+    runtime={{ include "gravitino.runtimeDir" . }}
+    out="${runtime}/gravitino-iceberg-rest-server.conf"
+
+    install -m 0600 "${src}/gravitino-iceberg-rest-server.conf" "${out}"
+    install -m 0444 "${src}/log4j2.properties" "${runtime}/log4j2.properties"
+
+    appended=0
+    if [ -d "${secrets}" ]; then
+      printf '\n# --- Appended from the Secret.\n' >> "${out}"
+      # The glob skips the volume's ..data bookkeeping entries by construction.
+      for f in "${secrets}"/*; do
+        [ -f "${f}" ] || continue
+        key="$(basename "${f}")"
+        value="$(cat "${f}")"
+        case "${value}" in
+          *$'\n'*) echo "secret ${key} contains a newline; refusing to write it into a properties file" >&2; exit 1 ;;
+          "") echo "secret ${key} is empty" >&2; exit 1 ;;
+        esac
+        # java.util.Properties treats a backslash as an escape; a password with
+        # one in it would otherwise arrive one character short.
+        printf '%s = %s\n' "${key}" "${value//\\/\\\\}" >> "${out}"
+        appended=$((appended + 1))
+      done
+    fi
+    # Read-only from here on: the server never writes it, and a config file it
+    # cannot modify is one less thing a compromise can do.
+    chmod 0400 "${out}"
+    echo "config assembled: $(grep -c '^gravitino\.' "${out}") properties, ${appended} from the Secret"
+    {{- if include "gravitino.downloadDriver" . }}
+
+    # The stock image has NO PostgreSQL driver: without this jar the server
+    # starts, passes its health check, and answers the first Iceberg call with
+    # `400 Couldn't load jdbc driver`. Verified before it reaches the classpath:
+    # a jar is code, and this one runs with the catalog's credentials.
+    url={{ .Values.catalog.postgresql.driver.url | quote }}
+    sha={{ .Values.catalog.postgresql.driver.sha256 | quote }}
+    dest="{{ include "gravitino.extraLibsDir" . }}/$(basename "${url}")"
+    echo "fetching ${url}"
+    curl --fail --silent --show-error --location \
+      --retry 5 --retry-delay 3 --retry-all-errors \
+      --connect-timeout 10 --max-time 180 \
+      --output "${dest}.part" "${url}"
+    echo "${sha}  ${dest}.part" | sha256sum --check --strict -
+    mv -f "${dest}.part" "${dest}"
+    chmod 0444 "${dest}"
+    {{- end }}
+
+  # Runs the server with java as PID 1, bypassing the image's start script.
+  # That script (1) rewrites conf/ in place, which a read-only root filesystem
+  # refuses; (2) passes -XX:-UseContainerSupport with a fixed -Xmx1024m, so the
+  # heap ignores the pod's memory limit; and (3) runs java as a CHILD of bash,
+  # which as PID 1 ignores SIGTERM — so the server never shuts down cleanly and
+  # the kubelet waits out the grace period and kills it mid-commit.
+  #
+  # The flags below are the ones bin/gravitino-iceberg-rest-server.sh sets for
+  # Java 17. Check them against that script when bumping the image.
+  start.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    home={{ include "gravitino.home" . }}
+    runtime={{ include "gravitino.runtimeDir" . }}
+    export GRAVITINO_HOME="${home}"
+    # ServerConfig reads gravitino-iceberg-rest-server.conf from here.
+    export GRAVITINO_CONF_DIR="${runtime}"
+
+    opens=()
+    for m in java.base/java.io java.base/java.lang.invoke java.base/java.lang.reflect \
+             java.base/java.lang java.base/java.math java.base/java.net java.base/java.nio \
+             java.base/java.text java.base/java.time java.base/java.util.concurrent.atomic \
+             java.base/java.util.concurrent java.base/java.util.regex java.base/java.util \
+             java.base/jdk.internal.ref java.base/jdk.internal.reflect java.sql/java.sql \
+             java.base/sun.util.calendar java.base/sun.nio.ch java.base/sun.nio.cs \
+             java.base/sun.security.action java.security.jgss/sun.security.krb5; do
+      opens+=(--add-opens "${m}=ALL-UNNAMED")
+    done
+
+    # JAVA_OPTS is split on whitespace on purpose: it is a list of flags.
+    # shellcheck disable=SC2086
+    exec java \
+      -Dfile.encoding=UTF-8 \
+      -Djava.io.tmpdir=/tmp \
+      -Dlog4j2.configurationFile="file://${runtime}/log4j2.properties" \
+      -XX:+IgnoreUnrecognizedVMOptions \
+      ${JAVA_OPTS:-} \
+      "${opens[@]}" \
+      -cp "${runtime}:{{ include "gravitino.extraLibsDir" . }}/*:${home}/libs/*" \
+      org.apache.gravitino.iceberg.server.GravitinoIcebergRESTServer

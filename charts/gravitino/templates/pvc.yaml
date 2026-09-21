@@ -1,0 +1,29 @@
+{{- if and (include "gravitino.sqlite" .) .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "gravitino.claimName" . }}
+  labels:
+    {{- include "gravitino.labels" . | nindent 4 }}
+  annotations:
+    # The catalog. Losing it does not lose the DATA — the Parquet files are in
+    # the bucket — it loses every table DEFINITION, and the lake becomes an
+    # unreadable pile of files. `helm uninstall` leaves this claim behind on
+    # purpose; delete it by hand when you mean it.
+    helm.sh/resource-policy: keep
+    {{- with .Values.persistence.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- with .Values.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.accessModes | nindent 4 }}
+  {{- with .Values.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size | quote }}
+{{- end }}

@@ -1,0 +1,28 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "gravitino.fullname" . }}
+  labels:
+    {{- include "gravitino.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "gravitino.selectorLabels" . | nindent 6 }}
+  endpoints:
+    # The REST port itself: there is no separate metrics listener. Mind the
+    # NetworkPolicy — with allowExternal false, Prometheus needs the client
+    # label or an extraFrom entry.
+    - port: {{ include "gravitino.scheme" . }}
+      path: /prometheus/metrics
+      scheme: {{ include "gravitino.scheme" . }}
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout }}
+      {{- with .Values.metrics.serviceMonitor.tlsConfig }}
+      tlsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

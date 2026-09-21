@@ -1,0 +1,56 @@
+Gravitino Iceberg REST {{ .Chart.AppVersion }} — catalog backend: {{ .Values.catalog.backend }}, storage: {{ .Values.storage.provider }}.
+
+Catalog URI for clients (note the /iceberg suffix; clients append /v1 themselves):
+  {{ include "gravitino.catalogUri" . }}
+
+Warehouse (data files):
+  {{ .Values.catalog.warehouse }}{{ if .Values.storage.endpoint }} via {{ .Values.storage.endpoint }}{{ end }} (path-style: {{ include "gravitino.pathStyle" . }})
+
+From your machine:
+  kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "gravitino.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  curl {{ include "gravitino.scheme" . }}://localhost:{{ .Values.service.port }}/iceberg/v1/config
+
+Verify the catalog is writable end to end:
+  helm test --namespace {{ .Release.Namespace }} {{ .Release.Name }}
+
+Trino:
+  connector.name=iceberg
+  iceberg.catalog.type=rest
+  iceberg.rest-catalog.uri={{ include "gravitino.catalogUri" . }}
+  fs.native-s3.enabled=true
+  s3.region={{ .Values.storage.region }}
+  {{- if .Values.storage.endpoint }}
+  s3.endpoint={{ .Values.storage.endpoint }}
+  {{- end }}
+  {{- if eq (include "gravitino.pathStyle" .) "true" }}
+  s3.path-style-access=true
+  {{- end }}
+  {{- if .Values.storage.credentialVending.enabled }}
+  iceberg.rest-catalog.vended-credentials-enabled=true
+  {{- end }}
+{{- if include "gravitino.sqlite" . }}
+
+The catalog is SQLite on PVC {{ include "gravitino.claimName" . }}. One replica, Recreate on
+upgrade (a few seconds of downtime). The claim survives `helm uninstall` on
+purpose: it holds every table definition. Back it up — a volume snapshot is
+enough, since the file is small.
+{{- end }}
+{{- if and (include "gravitino.postgresql" .) .Values.catalog.postgresql.driver.download }}
+
+The PostgreSQL driver is fetched from {{ .Values.catalog.postgresql.driver.url | trimSuffix (base .Values.catalog.postgresql.driver.url) }}
+on every pod start. In an air-gapped cluster, or with networkPolicy.restrictEgress, bake
+it into your image and set catalog.postgresql.driver.download=false.
+{{- end }}
+{{- if not (hasKey .Values.rawConfig "gravitino.authenticators") }}
+
+WARNING: no authenticator is configured. Any pod that can reach port {{ .Values.service.port }} can
+create, drop and repoint every table{{ if .Values.storage.credentialVending.enabled }}, and obtain storage credentials{{ end }}.
+{{- if .Values.networkPolicy.allowExternal }} networkPolicy.allowExternal
+is true, so that is every pod in the cluster.{{ end }}
+{{- end }}
+{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.allowExternal) }}
+
+The NetworkPolicy only admits labelled pods and networkPolicy.extraFrom. Label
+your engines:
+  {{ include "gravitino.clientLabel" . }}: "true"
+{{- end }}

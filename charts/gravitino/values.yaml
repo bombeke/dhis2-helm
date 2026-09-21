@@ -1,0 +1,444 @@
+# -----------------------------------------------------------------------------
+# Apache Gravitino — the Iceberg REST catalog, standalone.
+# -----------------------------------------------------------------------------
+#
+# `gravitino-iceberg-rest` (828 MB), NOT `gravitino` (2.42 GB). What this chart
+# serves is a REST catalog that writers commit into and Trino, Spark or DuckDB
+# read from; the metadata-lake surface of the full server has no consumer here.
+#
+# TWO SHIPPED DEFAULTS WOULD LOSE EVERYTHING SILENTLY — `catalog-backend =
+# memory` and `warehouse = /tmp`. Out of the box the server accepts namespace
+# and table creation, answers every read, reports success, holds the catalog IN
+# MEMORY and writes to the container's own /tmp. Both vanish on restart with
+# nothing in any log. This chart never renders either: the backend is always
+# JDBC, and it refuses to install without an object-store `catalog.warehouse`.
+#
+# Where settings live:
+#   ConfigMap  gravitino-iceberg-rest-server.conf minus its secrets, the
+#              log4j2 config, and the init/start scripts.
+#   Secret     S3 keys and the database password, one file each. They are
+#              appended to the config file by an init container and NEVER set
+#              as environment variables, so they stay out of `kubectl describe
+#              pod` and /proc/1/environ.
+#   Volume     the assembled config in an emptyDir; /tmp in an emptyDir, since
+#              the root filesystem is read-only; the SQLite catalog on a PVC.
+#
+# Switching between MinIO and AWS S3: see `storage` below, and README.md.
+
+nameOverride: ""
+fullnameOverride: ""
+clusterDomain: cluster.local
+
+commonLabels: {}
+commonAnnotations: {}
+
+image:
+  registry: docker.io
+  repository: apache/gravitino-iceberg-rest
+  tag: "1.3.0"
+  # Pin by digest in production: a tag can be re-pushed, a digest cannot.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# More than 1 needs catalog.backend=postgresql — SQLite is a file on a
+# ReadWriteOnce volume and the chart refuses the combination. The server
+# itself is stateless apart from its caches, so replicas scale reads linearly.
+replicaCount: 1
+
+# -----------------------------------------------------------------------------
+# The catalog: where table DEFINITIONS live.
+# -----------------------------------------------------------------------------
+#
+# Losing this does not lose the DATA — the Parquet files are in the bucket —
+# it loses every table definition, and the lake becomes an unreadable pile of
+# files. Both backends below survive a restart; `memory` is not offered.
+catalog:
+  # sqlite      a file on the chart's PVC. Durable, zero dependencies, ONE
+  #             replica. The right choice for a single-writer lake.
+  # postgresql  an external database. Required for more than one replica. The
+  #             stock image has NO PostgreSQL driver — see `postgresql.driver`.
+  backend: sqlite
+
+  # The root location data files are written under. REQUIRED, and it must be an
+  # object-store URI (s3://bucket/prefix); the chart refuses anything else,
+  # because the shipped default is /tmp.
+  #
+  # Vocabulary collision worth knowing before configuring a client: Gravitino
+  # reads ITS `warehouse` as this LOCATION, while a client's `warehouse`
+  # parameter (e.g. Iggy's Iceberg sink, `?warehouse=` on /v1/config) is the
+  # NAME OF A CATALOG to select. Leave the client's unset to get this one.
+  warehouse: ""
+
+  # The name `?warehouse=<name>` selects. Empty keeps Gravitino's default
+  # catalog, which is what a client with no `warehouse` gets.
+  name: ""
+
+  # Create the catalog tables on first start. Harmless afterwards.
+  initialize: true
+
+  sqlite:
+    # Relative to the PVC mount. Changing it after install starts an EMPTY
+    # catalog next to the old one.
+    file: catalog.db
+    # How long a writer waits for the file lock instead of failing at once
+    # with SQLITE_BUSY. Iceberg commits are short, but concurrent ones from
+    # several writers do collide, and without this the loser's commit fails.
+    busyTimeoutMs: 10000
+
+  postgresql:
+    host: ""
+    port: 5432
+    database: gravitino
+    username: gravitino
+    # Leave empty and use existingSecret in anything but a test.
+    password: ""
+    existingSecret: ""
+    existingSecretPasswordKey: password
+    # Appended to the JDBC URL verbatim. sslmode=require encrypts without
+    # verifying; verify-full needs the CA in the image or a mounted truststore.
+    params: "sslmode=prefer&connectTimeout=10&socketTimeout=60&tcpKeepAlive=true&ApplicationName=gravitino-iceberg-rest"
+
+    # The stock image ships ONE JDBC driver, SQLite. Naming org.postgresql.Driver
+    # without adding the jar produces `400 Couldn't load jdbc driver` on the
+    # first Iceberg call — which reads as a bad request, not a missing jar.
+    #
+    # download: true  the init container fetches this jar from Maven Central,
+    #                 verifies the sha256, and puts it on the classpath. Needs
+    #                 egress to repo1.maven.org on every pod start.
+    # download: false the driver is already in the image — set `image` to one
+    #                 you built with postgresql-<version>.jar in libs/, or
+    #                 mirror the jar and point `url` at your mirror.
+    driver:
+      download: true
+      url: https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.13/postgresql-42.7.13.jar
+      # Verified against Maven Central's published .sha1 for this jar.
+      sha256: 6e0e4cc2d8cae902084f8a2b18728b073a6fd9d1f87c9d8bff8f298c18185b93
+
+# -----------------------------------------------------------------------------
+# Object storage — MinIO or AWS S3.
+# -----------------------------------------------------------------------------
+#
+# ONE switch, `provider`, and it decides two things you would otherwise have to
+# get right by hand:
+#
+#                   minio                     s3
+#   endpoint        required (http://minio:9000)  empty = AWS; set only for a
+#                                                 VPC or FIPS endpoint
+#   path-style      forced ON — MinIO addresses   OFF — AWS virtual-hosted
+#                   a bucket as a path segment    style is the default and
+#                   and without it every request  the only style new buckets
+#                   resolves a bucket-prefixed    guarantee
+#                   hostname and fails with a
+#                   DNS error that reads as a
+#                   network problem
+#   credentials     static keys                   static keys, or none and
+#                                                 IRSA / EKS Pod Identity /
+#                                                 instance profile
+#
+# The Iceberg AWS bundle is already in the image; neither needs extra jars.
+# Other S3-compatible stores (Ceph RGW, Garage, R2, Wasabi) use `minio`.
+storage:
+  provider: minio
+  endpoint: http://minio:9000
+  region: us-east-1
+  # Override the derived value above. Leave null.
+  pathStyleAccess: null
+
+  credentials:
+    # static        s3-access-key-id / s3-secret-access-key from a Secret.
+    # defaultChain  NO keys: the AWS SDK default chain resolves them — IRSA
+    #               (annotate the ServiceAccount below with
+    #               eks.amazonaws.com/role-arn), EKS Pod Identity, or the node's
+    #               instance profile. provider=s3 only. Nothing long-lived to
+    #               rotate or leak; prefer it on EKS.
+    source: static
+    accessKey: ""
+    secretKey: ""
+    # Your own Secret instead of the chart's.
+    existingSecret: ""
+    accessKeyKey: access-key
+    secretKeyKey: secret-key
+
+  # Credential vending: the catalog hands each client short-lived (or scoped)
+  # storage credentials in the loadTable response, so Trino, Spark and DuckDB
+  # need NO storage keys of their own and a reader cannot touch tables it was
+  # not given. Off by default because clients must opt in with
+  # `header.X-Iceberg-Access-Delegation: vended-credentials`.
+  #
+  #   s3-secret-key  hands out the static keys above. Works with MinIO. It
+  #                  centralises keys; it does not scope them.
+  #   s3-token       STS AssumeRole into `roleArn` with a session policy scoped
+  #                  to the table's prefix. AWS (or MinIO's STS) only.
+  credentialVending:
+    enabled: false
+    provider: s3-token
+    roleArn: ""
+    externalId: ""
+    # s3-token: where STS lives. Empty = AWS's own. MinIO's STS is the MinIO
+    # endpoint itself.
+    tokenServiceEndpoint: ""
+
+# -----------------------------------------------------------------------------
+# Server tuning.
+# -----------------------------------------------------------------------------
+#
+# Rendered as `gravitino.iceberg-rest.<key> = <value>` and merged key by key,
+# so overriding one keeps the rest. Every key was checked against
+# gravitino-iceberg-common / gravitino-server-common 1.3.0.
+#
+# Owned by the chart and ignored here: host, httpPort, catalog-backend,
+# catalog-backend-name, uri, warehouse, io-impl, jdbc-*, s3-*,
+# credential-provider*, enableHttps, httpsPort, keyStore*.
+config:
+  # Jetty. minThreads is kept warm, maxThreads is the ceiling. A catalog call
+  # is I/O-bound — a metadata.json read from S3, a row in the database — so
+  # threads mostly wait and the ceiling can sit well above cores. The queue
+  # is where excess requests wait before Jetty rejects them with 503; a
+  # short queue sheds load visibly instead of timing out invisibly.
+  minThreads: 16
+  maxThreads: 200
+  threadPoolWorkQueueSize: 200
+  idleTimeout: 30000
+  # Graceful Jetty stop, in ms. Kept below terminationGracePeriodSeconds so
+  # in-flight commits finish before the kubelet's SIGKILL.
+  stopTimeout: 20000
+  shutdown.timeout: 3000
+  requestHeaderSize: 131072
+  responseHeaderSize: 131072
+
+  # The table metadata cache is the single largest win: loadTable otherwise
+  # reads metadata.json from object storage on every call, and engines call it
+  # constantly during planning. It is keyed by metadata LOCATION, checked
+  # against the catalog on each load, so a commit through another replica is
+  # never served stale.
+  table-metadata-cache-capacity: 2000
+  table-metadata-cache-expire-minutes: 60
+
+  # Cache for server-side scan planning results.
+  scan-plan-cache-capacity: 200
+  scan-plan-cache-expire-minutes: 10
+
+# Full property names, rendered verbatim, for anything outside the
+# `gravitino.iceberg-rest.` prefix — authentication, for instance:
+#   gravitino.authenticators: oauth
+#   gravitino.authenticator.oauth.serviceAudience: iceberg
+#   gravitino.authenticator.oauth.defaultSignKey: <base64>   (use extraSecretConfig)
+# Standalone mode supports authentication, NOT authorization; the server
+# refuses to start with authorization enabled.
+rawConfig:
+  # SSRF guard for the fetch-file endpoint. Shipped on; keep it on.
+  gravitino.fetchFile.blockUnsafeRemoteUri: true
+
+# Same as rawConfig, but written to the Secret and appended by the init
+# container: for signing keys, OAuth secrets and the like.
+extraSecretConfig: {}
+
+# -----------------------------------------------------------------------------
+# The JVM.
+# -----------------------------------------------------------------------------
+#
+# The image's own start script passes -XX:-UseContainerSupport and a fixed
+# -Xmx1024m, so the JVM ignores the pod's limits entirely: raise the memory
+# limit and the heap stays at 1 GiB; lower it below ~1.6 GiB and the pod is
+# OOMKilled under load. This chart bypasses that script and execs java
+# directly — which also makes the JVM PID 1, so SIGTERM reaches it and
+# in-flight commits drain, where the stock script's bash parent swallows the
+# signal and the kubelet waits out the grace period before SIGKILL.
+jvm:
+  # Heap as a share of the container memory limit. The rest is metaspace
+  # thread stacks, direct buffers for the S3 client, and SQLite's native
+  # allocations — 30% is headroom, not waste.
+  maxRAMPercentage: 70
+  initialRAMPercentage: 50
+  # Without a CPU limit the JVM sizes GC and ForkJoin pools from the NODE's
+  # core count. Set this to your CPU request when you run without limits.
+  activeProcessorCount: ""
+  # Die on OOM rather than limp: a half-alive catalog that answers some
+  # commits and not others is worse than a restart.
+  extraOpts: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+ExitOnOutOfMemoryError -XX:MaxMetaspaceSize=256m -Dnetworkaddress.cache.ttl=60"
+
+logLevel: info
+
+# Prometheus text format at /prometheus/metrics on the REST port: Jetty
+# threads and queue, per-endpoint request rates and latencies, JVM heap and GC.
+# The two worth alerting on are the Jetty queue size (requests waiting for a
+# thread — raise maxThreads, or add replicas) and heap after GC.
+metrics:
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+    # With tls.enabled: the CA to verify the server, e.g.
+    #   ca: {secret: {name: gravitino-tls, key: ca.crt}}
+    #   serverName: <fullname>.<namespace>.svc
+    tlsConfig: {}
+
+service:
+  type: ClusterIP
+  port: 9001
+  nodePort: ""
+  annotations: {}
+
+# -----------------------------------------------------------------------------
+# TLS on the REST port.
+# -----------------------------------------------------------------------------
+#
+# Jetty wants a KEYSTORE, not PEM. cert-manager writes one when the
+# Certificate has `keystores.pkcs12.create: true`, into the same Secret as
+# `keystore.p12`, with the password in a Secret of your choosing.
+#
+# With TLS on, the server serves HTTPS only; probes and the test switch over.
+tls:
+  enabled: false
+  existingSecret: ""
+  keystoreKey: keystore.p12
+  keystoreType: PKCS12
+  passwordSecret: ""
+  passwordKey: password
+
+persistence:
+  # SQLite only; ignored for postgresql, where the pod is stateless.
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  # The catalog is small — a row per table and namespace, a few MB for
+  # thousands of tables. The size is the storage class minimum, not a need.
+  size: 1Gi
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: iceberg.local
+      paths:
+        # The catalog lives under /iceberg; clients set uri=https://host/iceberg.
+        - path: /iceberg
+          pathType: Prefix
+  tls: []
+
+serviceAccount:
+  create: true
+  name: ""
+  # IRSA: eks.amazonaws.com/role-arn: arn:aws:iam::<acct>:role/<role>
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+# The root filesystem is read-only: the config is assembled into an emptyDir,
+# /tmp is an emptyDir (the JVM and SQLite's native library both need it), and
+# logs go to stdout instead of the image's logs/ directory.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# Memory: the heap is jvm.maxRAMPercentage of the limit, so this is the one
+# number to change. 2 GiB gives a ~1.4 GiB heap. Size by watching heap after
+# GC (see `metrics`); the metadata cache is the main consumer and scales with
+# table-metadata-cache-capacity times the size of your metadata.json files.
+#
+# No CPU limit by default. The JVM's startup and JIT are bursty, and a CPU
+# limit throttles exactly that — a catalog cold-starting under a 500m limit
+# takes minutes. Set jvm.activeProcessorCount instead.
+resources:
+  requests:
+    cpu: 250m
+    memory: 2Gi
+  limits:
+    memory: 2Gi
+
+initResources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+
+# /iceberg/v1/config is the Iceberg REST handshake and is unauthenticated.
+# Mind the /iceberg prefix: a bare /v1/config answers 404, the same answer a
+# misconfigured client `uri` gets.
+startupProbe:
+  enabled: true
+  periodSeconds: 5
+  timeoutSeconds: 5
+  # Two and a half minutes: JVM start plus SQLite/PostgreSQL schema
+  # initialisation on first install.
+  failureThreshold: 30
+readinessProbe:
+  enabled: true
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+livenessProbe:
+  enabled: true
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 6
+
+terminationGracePeriodSeconds: 30
+
+priorityClassName: ""
+nodeSelector: {}
+tolerations: []
+topologySpreadConstraints: []
+affinity: {}
+
+# Applied only when `affinity` is empty and replicaCount > 1.
+#   soft - prefer separate nodes.  hard - require them.  "" - none.
+podAntiAffinityPreset: soft
+
+# Only rendered when replicaCount > 1: on a single replica it either blocks
+# every drain or guards nothing.
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+extraEnv: []
+extraVolumes: []
+extraVolumeMounts: []
+
+networkPolicy:
+  enabled: true
+  #   true  - any pod can reach the REST port.
+  #   false - only pods labelled `<fullname>-client: "true"` (any namespace),
+  #           plus the peers in extraFrom. The helm test pod carries the label.
+  #
+  # An Iceberg catalog exists to be read by engines that are NOT in this
+  # release, so false needs extraFrom for your Trino/Spark namespaces or the
+  # lake is unreadable by the very things it exists for.
+  allowExternal: true
+  extraFrom: []
+  #  - namespaceSelector:
+  #      matchLabels:
+  #        kubernetes.io/metadata.name: trino
+
+  # Restrict egress to DNS plus extraEgress. The server needs object storage,
+  # the database, STS when vending tokens, and Maven Central when downloading
+  # the driver — all of which you must list, so it is off by default.
+  restrictEgress: false
+  extraEgress: []
+  #  - to:
+  #      - podSelector:
+  #          matchLabels:
+  #            app.kubernetes.io/name: minio
+  #    ports:
+  #      - port: 9000
+  #        protocol: TCP

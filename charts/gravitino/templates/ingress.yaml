@@ -1,0 +1,41 @@
+{{- if .Values.ingress.enabled }}
+{{- $fullname := include "gravitino.fullname" . }}
+{{- $port := .Values.service.port }}
+# The catalog has NO authentication unless you configure an authenticator
+# through rawConfig. Anyone who can reach this Ingress can create, drop and
+# repoint every table — and, with credential vending on, obtain storage
+# credentials. Put authentication in front of it, or do not expose it.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "gravitino.labels" . | nindent 4 }}
+  {{- with (merge (deepCopy .Values.ingress.annotations) .Values.commonAnnotations) }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ $fullname }}
+                port:
+                  number: {{ $port }}
+          {{- end }}
+    {{- end }}
+{{- end }}

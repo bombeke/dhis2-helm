@@ -1,0 +1,299 @@
+{{- include "gravitino.validate" . }}
+{{- $fullname := include "gravitino.fullname" . }}
+{{- $p := "gravitino.iceberg-rest." }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "gravitino.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: 5
+  strategy:
+    {{- if include "gravitino.sqlite" . }}
+    # Recreate, and it has to be. A rolling update starts the new pod before
+    # the old one stops: on a ReadWriteOnce volume it hangs in Multi-Attach on
+    # another node, and on the same node two JVMs write one SQLite file. The
+    # cost is a few seconds of downtime per upgrade.
+    type: Recreate
+    {{- else }}
+    # Surge first, never below the configured count: a catalog restart must
+    # not leave writers with nowhere to commit.
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    {{- end }}
+  selector:
+    matchLabels:
+      {{- include "gravitino.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "gravitino.selectorLabels" . | nindent 8 }}
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        # The config is assembled once at start-up, so a change to either has
+        # to restart the pod to mean anything. Secrets you bring yourself are
+        # not covered — roll the Deployment after rotating one.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if include "gravitino.ownSecret" . }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "gravitino.serviceAccountName" . }}
+      # Nothing here calls the Kubernetes API. IRSA and EKS Pod Identity inject
+      # their own projected token and are unaffected by this.
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (include "gravitino.affinity" .) }}
+      affinity:
+        {{- . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: init
+          image: {{ include "gravitino.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command: ["/bin/bash", "{{ include "gravitino.scriptDir" . }}/init.sh"]
+          resources:
+            {{- toYaml .Values.initResources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: {{ include "gravitino.confDir" . }}
+              readOnly: true
+            - name: scripts
+              mountPath: {{ include "gravitino.scriptDir" . }}
+              readOnly: true
+            {{- if include "gravitino.hasSecrets" . }}
+            - name: secrets
+              mountPath: {{ include "gravitino.secretDir" . }}
+              readOnly: true
+            {{- end }}
+            - name: runtime
+              mountPath: {{ include "gravitino.runtimeDir" . }}
+            {{- if include "gravitino.downloadDriver" . }}
+            - name: extra-libs
+              mountPath: {{ include "gravitino.extraLibsDir" . }}
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        - name: gravitino
+          image: {{ include "gravitino.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command: ["/bin/bash", "{{ include "gravitino.scriptDir" . }}/start.sh"]
+          env:
+            - name: JAVA_OPTS
+              value: {{ include "gravitino.javaOpts" . | quote }}
+            {{- if eq .Values.storage.provider "s3" }}
+            # The SDK's own region, for anything that resolves it outside the
+            # catalog's config — STS in credential vending, notably.
+            - name: AWS_REGION
+              value: {{ .Values.storage.region | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          {{- if .Values.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: /iceberg/v1/config
+              port: http
+              scheme: {{ include "gravitino.scheme" . | upper }}
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          # The Iceberg REST handshake, unauthenticated. Note the /iceberg
+          # prefix: a bare /v1/config is a 404.
+          readinessProbe:
+            httpGet:
+              path: /iceberg/v1/config
+              port: http
+              scheme: {{ include "gravitino.scheme" . | upper }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.livenessProbe.enabled }}
+          # TCP, not the handshake: a slow database or object store should take
+          # the pod out of the Service (readiness), not restart a JVM that
+          # would come back to the same slow dependency with a cold cache.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          {{- end }}
+          lifecycle:
+            # Endpoint removal and SIGTERM race. A short pause lets kube-proxy
+            # and ingress controllers stop routing here before Jetty stops
+            # accepting, so a rolling update drops no commits.
+            preStop:
+              exec:
+                command: ["/bin/sleep", "5"]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: runtime
+              mountPath: {{ include "gravitino.runtimeDir" . }}
+              readOnly: true
+            {{- if include "gravitino.downloadDriver" . }}
+            - name: extra-libs
+              mountPath: {{ include "gravitino.extraLibsDir" . }}
+              readOnly: true
+            {{- end }}
+            {{- if include "gravitino.sqlite" . }}
+            - name: data
+              mountPath: {{ include "gravitino.dataDir" . }}
+            {{- end }}
+            {{- if .Values.tls.enabled }}
+            - name: tls
+              mountPath: {{ include "gravitino.tlsDir" . }}
+              readOnly: true
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullname }}
+            defaultMode: 0444
+            items:
+              - key: gravitino-iceberg-rest-server.conf
+                path: gravitino-iceberg-rest-server.conf
+              - key: log4j2.properties
+                path: log4j2.properties
+        - name: scripts
+          configMap:
+            name: {{ $fullname }}
+            defaultMode: 0555
+            items:
+              - key: init.sh
+                path: init.sh
+              - key: start.sh
+                path: start.sh
+        {{- if include "gravitino.hasSecrets" . }}
+        # Each file is named after the property it sets; init.sh appends them
+        # to the config. Only the init container mounts this.
+        - name: secrets
+          projected:
+            defaultMode: 0440
+            sources:
+              {{- if include "gravitino.staticKeys" . }}
+              - secret:
+                  name: {{ include "gravitino.storageSecretName" . }}
+                  items:
+                    - key: {{ include "gravitino.storageAccessKeyKey" . }}
+                      path: {{ $p }}s3-access-key-id
+                    - key: {{ include "gravitino.storageSecretKeyKey" . }}
+                      path: {{ $p }}s3-secret-access-key
+              {{- end }}
+              {{- if include "gravitino.postgresql" . }}
+              - secret:
+                  name: {{ include "gravitino.dbSecretName" . }}
+                  items:
+                    - key: {{ include "gravitino.dbPasswordKey" . }}
+                      path: {{ $p }}jdbc-password
+              {{- end }}
+              {{- if .Values.extraSecretConfig }}
+              - secret:
+                  name: {{ include "gravitino.secretName" . }}
+                  items:
+                    {{- range $key := (keys .Values.extraSecretConfig | sortAlpha) }}
+                    - key: {{ $key }}
+                      path: {{ $key }}
+                    {{- end }}
+              {{- end }}
+              {{- if .Values.tls.enabled }}
+              - secret:
+                  name: {{ .Values.tls.passwordSecret }}
+                  items:
+                    - key: {{ .Values.tls.passwordKey }}
+                      path: {{ $p }}keyStorePassword
+                    # Jetty refuses to start without a key password too. A
+                    # PKCS12 keystore has one password for both.
+                    - key: {{ .Values.tls.passwordKey }}
+                      path: {{ $p }}managerPassword
+              {{- end }}
+        {{- end }}
+        {{- if .Values.tls.enabled }}
+        - name: tls
+          secret:
+            secretName: {{ .Values.tls.existingSecret }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.tls.keystoreKey }}
+                path: {{ .Values.tls.keystoreKey }}
+        {{- end }}
+        # The assembled config. Small, and it never leaves the pod.
+        - name: runtime
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        {{- if include "gravitino.downloadDriver" . }}
+        - name: extra-libs
+          emptyDir:
+            sizeLimit: 64Mi
+        {{- end }}
+        # JVM temp files, and sqlite-jdbc's native library, which it extracts
+        # here and loads on first use.
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        {{- if include "gravitino.sqlite" . }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "gravitino.claimName" . }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}

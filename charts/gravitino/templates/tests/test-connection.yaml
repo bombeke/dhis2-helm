@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "gravitino.fullname" . }}-test-connection
+  labels:
+    {{- include "gravitino.labels" . | nindent 4 }}
+    # Lets the pod through the NetworkPolicy when allowExternal is false.
+    {{ include "gravitino.clientLabel" . }}: "true"
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  securityContext:
+    {{- toYaml .Values.podSecurityContext | nindent 4 }}
+  containers:
+    # The server's own image: it has curl, and it is already on the node.
+    - name: test
+      image: {{ include "gravitino.image" . }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      resources:
+        {{- toYaml .Values.initResources | nindent 8 }}
+      command:
+        - /bin/bash
+        - -ec
+        - |
+          base={{ include "gravitino.catalogUri" . | quote }}
+          # -k only with TLS: this checks the catalog, not your PKI.
+          curl_() { curl --silent --show-error --fail-with-body {{ if .Values.tls.enabled }}--insecure {{ end }}--max-time 30 "$@"; }
+          ns="helm_test_$(date +%s)_$RANDOM"
+
+          echo "GET ${base}/v1/config"
+          curl_ "${base}/v1/config" >/dev/null
+
+          # A round trip through the catalog backend: create a namespace, read
+          # it back, drop it. This is what proves the JDBC catalog is writable
+          # — the handshake above would pass on the throwaway `memory` backend.
+          echo "POST ${base}/v1/namespaces (${ns})"
+          curl_ -X POST -H 'Content-Type: application/json' \
+            -d "{\"namespace\":[\"${ns}\"],\"properties\":{}}" "${base}/v1/namespaces"; echo
+          curl_ "${base}/v1/namespaces/${ns}" >/dev/null
+          curl_ -X DELETE "${base}/v1/namespaces/${ns}"
+          echo "catalog backend round trip ok"
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+  volumes:
+    - name: tmp
+      emptyDir:
+        sizeLimit: 16Mi

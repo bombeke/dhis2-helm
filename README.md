@@ -104,6 +104,25 @@ Install dashboard chart
 The admin password is generated on install; `helm status dashboard -n dashboard`
 prints the command to read it.
 
+## Installing the Iceberg REST Catalog
+[Apache Gravitino's Iceberg REST catalog](./charts/gravitino), standalone. Table
+definitions go in SQLite on a PVC (one replica) or in PostgreSQL (any number of
+replicas). Data files go to MinIO or AWS S3, and `storage.provider` switches
+between them. See the [chart README](./charts/gravitino/README.md) for switching,
+IRSA, credential vending and tuning.
+
+```sh
+kubectl create secret generic lake-s3 -n lake \
+  --from-literal=access-key=minioadmin --from-literal=secret-key='…'
+helm upgrade --install catalog dhis2/gravitino -n lake --create-namespace \
+  --set catalog.warehouse=s3://lake/warehouse \
+  --set storage.endpoint=http://minio.minio.svc:9000 \
+  --set storage.credentials.existingSecret=lake-s3
+helm test catalog -n lake
+```
+Clients connect to `http://catalog-gravitino.lake.svc:9001/iceberg`. Keep the
+`/iceberg` suffix.
+
 ## Installing SmartAI 
 [DHIS2 smartai helm chart](./charts/smartai) is published to
 https://bombeke.github.io/dhis2-helm
