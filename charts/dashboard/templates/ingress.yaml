@@ -1,6 +1,7 @@
 {{- if .Values.ingress.enabled }}
 {{- $fullname := include "dashboard.fullname" . }}
 {{- $port := .Values.service.port }}
+{{- $tls := hasKey .Values.ingress "certIssuer" -}}
 {{- $annotations := merge (deepCopy .Values.ingress.annotations) .Values.commonAnnotations }}
 {{- with .Values.ingress.certIssuer }}
 {{- $_ := set $annotations "cert-manager.io/cluster-issuer" . }}
@@ -11,17 +12,28 @@ metadata:
   name: {{ $fullname }}
   labels:
     {{- include "dashboard.componentLabels" (dict "ctx" . "component" "web") | nindent 4 }}
-  {{- with $annotations }}
   annotations:
+  {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
+  {{- end }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-{{include "dashboard.fullname" . }}-middleware@kubernetescrd
+  {{- if $tls }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.certIssuer | quote }}
+    ingress.kubernetes.io/ssl-redirect: "true"
   {{- end }}
 spec:
   {{- with .Values.ingress.className }}
-  ingressClassName: {{ . | quote }}
+  ingressClassName: {{ . }}
   {{- end }}
-  {{- with .Values.ingress.tls }}
+  {{- if .Values.ingress.tls }}
   tls:
-    {{- toYaml . | nindent 4 }}
+    {{- range .Values.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
   {{- end }}
   rules:
     {{- range .Values.ingress.hosts }}
@@ -30,12 +42,29 @@ spec:
         paths:
           {{- range .paths }}
           - path: {{ .path }}
-            pathType: {{ .pathType }}
+            {{- with .pathType }}
+            pathType: {{ . }}
+            {{- end }}
             backend:
               service:
-                name: {{ $fullname }}
+                name: {{ include "dashboard.fullname" $ }}
                 port:
-                  number: {{ $port }}
+                  number: {{ $.Values.service.port }}
           {{- end }}
     {{- end }}
 {{- end }}
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "dashboard.fullname" . }}-middleware
+  labels:
+{{- include "dashboard.labels" . | nindent 4 }}
+spec:
+  headers:
+{{- with .Values.middleware.headers }}
+  {{- toYaml . | nindent 4 }}
+{{- end }}
+    accessControlAllowOriginList:
+{{ toYaml .Values.allowedOrigins | nindent 6 }}

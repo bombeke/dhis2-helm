@@ -30,5 +30,5 @@ dependencies:
 # changes, the Drupal StatefulSet and PVCs are gone, and the metastore is no
 # longer created here — point `metastore` at an existing PostgreSQL (for
 # example the timescaledb chart in this repository).
-version: 0.2.0
+version: 0.2.1
 appVersion: "6.1.0"
