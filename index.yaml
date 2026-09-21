@@ -2611,6 +2611,35 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: 6.1.0
+    created: "2026-09-21T15:47:16.912433001Z"
+    dependencies:
+    - condition: valkey.enabled
+      name: valkey
+      repository: https://valkey.io/valkey-helm
+      version: ~0
+    description: Apache Superset 6 — web, Celery worker and beat — on the upstream
+      lean image, with an external PostgreSQL/MySQL metastore, Valkey for caching
+      and the Celery broker, database drivers for TimescaleDB/PostgreSQL and ClickHouse,
+      optional .supx extensions, embedding and alerts & reports.
+    digest: cb3adc79e47cee37d8c2e10b42cc70b636cf8ce1d64244da686d246309fa565f
+    keywords:
+    - superset
+    - dashboards
+    - analytics
+    - bi
+    name: dashboard
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/dashboard-0.2.1/dashboard-0.2.1.tgz
+    version: 0.2.1
+  - annotations:
+      category: Analytics
+      images: |
+        - name: superset
+          image: docker.io/apache/superset:6.1.0
+      licenses: Apache-2.0
+    apiVersion: v2
+    appVersion: 6.1.0
     created: "2026-09-19T21:29:34.938776394Z"
     dependencies:
     - condition: valkey.enabled
@@ -5250,4 +5279,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2026-09-19T21:29:35.108177679Z"
+generated: "2026-09-21T15:47:17.141438418Z"
