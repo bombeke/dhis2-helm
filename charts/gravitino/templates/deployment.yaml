@@ -180,6 +180,9 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
+            - name: scripts
+              mountPath: {{ include "gravitino.scriptDir" . }}
+              readOnly: true
             - name: runtime
               mountPath: {{ include "gravitino.runtimeDir" . }}
               readOnly: true
