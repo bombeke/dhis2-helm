@@ -1,4 +1,6 @@
-Kafka {{ .Chart.AppVersion }} (KRaft combined mode, {{ .Values.replicaCount }} node{{ if gt (int .Values.replicaCount) 1 }}s{{ end }}).
+{{- $replicas := int (include "kafka.replicas" .) }}
+{{- $controllers := int (include "kafka.controllers" .) }}
+Kafka {{ .Chart.AppVersion }} (KRaft, {{ .Values.mode }} mode: {{ $replicas }} node{{ if gt $replicas 1 }}s{{ end }}, {{ $controllers }} controller{{ if gt $controllers 1 }}s{{ end }}).
 
 In-cluster bootstrap servers:
   {{ include "kafka.bootstrapServers" . }}
@@ -11,7 +13,7 @@ label to client pods:
 {{- if .Values.externalAccess.enabled }}
 
 External access ({{ .Values.externalAccess.service.type }}):
-{{- range $i := until (int .Values.replicaCount) }}
+{{- range $i := until (int (include "kafka.replicas" .)) }}
   broker {{ $i }}: {{ $.Values.externalAccess.host }}:{{ add (int $.Values.externalAccess.basePort) $i }}
 {{- end }}
 {{- if eq .Values.externalAccess.service.type "ClusterIP" }}

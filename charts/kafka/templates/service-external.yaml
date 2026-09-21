@@ -1,6 +1,6 @@
 {{- if .Values.externalAccess.enabled }}
 {{- $fullname := include "kafka.fullname" . }}
-{{- range $i := until (int .Values.replicaCount) }}
+{{- range $i := until (int (include "kafka.replicas" .)) }}
 {{- $port := add (int $.Values.externalAccess.basePort) $i }}
 # One Service per broker: an external client must reach the exact broker that
 # advertised <host>:{{ $port }}.

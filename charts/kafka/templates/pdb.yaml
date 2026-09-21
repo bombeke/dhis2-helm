@@ -1,4 +1,4 @@
-{{- if .Values.pdb.create }}
+{{- if and .Values.pdb.create (eq .Values.mode "cluster") }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:

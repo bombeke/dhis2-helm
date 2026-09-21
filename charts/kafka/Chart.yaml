@@ -20,5 +20,6 @@ keywords:
 
 # 0.2.0 replaces the Bitnami-based chart. Not an in-place upgrade: resource
 # names, the data volume layout and the cluster id all change.
-version: 0.2.0
+# 0.3.0 replaces replicaCount with mode (single|cluster) and cluster.*.
+version: 0.3.0
 appVersion: "4.3.1"

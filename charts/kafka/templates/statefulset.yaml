@@ -11,10 +11,10 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{ include "kafka.replicas" . }}
   serviceName: {{ include "kafka.headlessName" . }}
-  # Start all pods together. Each node is a controller, and none becomes ready
-  # until a quorum of voters is up. OrderedReady would wait forever on pod 0.
+  # Start all pods together. No controller becomes ready until a quorum of
+  # voters is up, so OrderedReady would wait forever on pod 0.
   podManagementPolicy: Parallel
   updateStrategy:
     type: RollingUpdate
@@ -57,9 +57,20 @@ spec:
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
+      {{- if .Values.affinity }}
       affinity:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml .Values.affinity | nindent 8 }}
+      {{- else if eq .Values.mode "cluster" }}
+      # Spread brokers across nodes so one node failure takes out one broker.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "kafka.selectorLabels" . | nindent 20 }}
       {{- end }}
       {{- with .Values.tolerations }}
       tolerations:
@@ -75,26 +86,54 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          # Per-pod identity comes from the StatefulSet ordinal (<name>-N).
-          # Use shell variables only here: the image turns any exported KAFKA_*
-          # variable into a broker property.
+          # Per-pod settings come from the StatefulSet ordinal (<name>-N). They
+          # are written straight into server.properties rather than passed as
+          # KAFKA_* env vars through the image's docker wrapper, so what the
+          # broker runs with is exactly what is written here.
           command: ["/bin/bash", "-ec"]
           args:
             - |
               ordinal="${HOSTNAME##*-}"
-              export KAFKA_NODE_ID="${ordinal}"
-              export KAFKA_ADVERTISED_LISTENERS="{{ .Values.listeners.client.name }}://${HOSTNAME}.{{ include "kafka.headlessName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:{{ .Values.listeners.client.port }}{{ if .Values.externalAccess.enabled }},{{ .Values.externalAccess.name }}://{{ .Values.externalAccess.host }}:$(( {{ .Values.externalAccess.basePort }} + ordinal )){{ end }}"
-              exec /__cacert_entrypoint.sh /etc/kafka/docker/run
+              conf=/opt/kafka/config/server.properties
+
+              if [ "${ordinal}" -lt {{ include "kafka.controllers" . }} ]; then
+                roles="broker,controller"
+                listeners="{{ .Values.listeners.client.name }}://:{{ .Values.listeners.client.port }},{{ .Values.listeners.controller.name }}://:{{ .Values.listeners.controller.port }}"
+              else
+                roles="broker"
+                listeners="{{ .Values.listeners.client.name }}://:{{ .Values.listeners.client.port }}"
+              fi
+              advertised="{{ .Values.listeners.client.name }}://${HOSTNAME}.{{ include "kafka.headlessName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:{{ .Values.listeners.client.port }}"
+              {{- if .Values.externalAccess.enabled }}
+              listeners="${listeners},{{ .Values.externalAccess.name }}://:{{ .Values.externalAccess.containerPort }}"
+              advertised="${advertised},{{ .Values.externalAccess.name }}://{{ .Values.externalAccess.host }}:$(( {{ .Values.externalAccess.basePort }} + ordinal ))"
+              {{- end }}
+
+              cp /mnt/shared/config/log4j2.yaml /mnt/shared/config/tools-log4j2.yaml /opt/kafka/config/
+              cp /mnt/shared/config/server.properties "${conf}"
+              cat >> "${conf}" <<EOF
+
+              # --- Per-pod settings
+              node.id=${ordinal}
+              process.roles=${roles}
+              listeners=${listeners}
+              advertised.listeners=${advertised}
+              EOF
+              echo "===> server.properties"
+              cat "${conf}"
+
+              # Format the data dir on first start. Later starts find it
+              # formatted with the same cluster id and skip this.
+              KAFKA_HEAP_OPTS="-Xmx256m" /opt/kafka/bin/kafka-storage.sh format \
+                --ignore-formatted --cluster-id "${CLUSTER_ID}" --config "${conf}"
+
+              exec /opt/kafka/bin/kafka-server-start.sh "${conf}"
           env:
             - name: CLUSTER_ID
               valueFrom:
                 secretKeyRef:
                   name: {{ include "kafka.secretName" . }}
                   key: {{ ternary .Values.existingSecretClusterIdKey "cluster-id" (not (empty .Values.existingSecret)) }}
-            # Set explicitly. If unset, the image derives listeners from
-            # advertised.listeners, which never includes the controller.
-            - name: KAFKA_LISTENERS
-              value: {{ include "kafka.listeners" . | quote }}
             - name: KAFKA_HEAP_OPTS
               value: {{ .Values.heapOpts | quote }}
             - name: LOG_DIR
@@ -150,7 +189,7 @@ spec:
             - name: server-config
               mountPath: /mnt/shared/config
               readOnly: true
-            # The image writes its final config here on every start.
+            # The start script writes the final config here on every start.
             - name: kafka-config
               mountPath: /opt/kafka/config
             - name: logs

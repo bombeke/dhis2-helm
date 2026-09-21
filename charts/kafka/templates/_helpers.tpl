@@ -76,23 +76,55 @@ app.kubernetes.io/component: ui
 {{- printf "%s.%s.svc.%s:%d" (include "kafka.fullname" .) .Release.Namespace .Values.clusterDomain (int .Values.listeners.client.port) }}
 {{- end }}
 
-{{/* Static KRaft voter set: <ordinal>@<pod>.<headless>:<controller port> for every replica. */}}
+{{/* Number of Kafka pods. */}}
+{{- define "kafka.replicas" -}}
+{{- if eq .Values.mode "cluster" -}}
+{{- int .Values.cluster.replicaCount -}}
+{{- else -}}
+1
+{{- end -}}
+{{- end }}
+
+{{/* Number of KRaft voters: pods 0..N-1 run broker+controller, the rest broker only. */}}
+{{- define "kafka.controllers" -}}
+{{- if eq .Values.mode "cluster" -}}
+{{- int .Values.cluster.controllers -}}
+{{- else -}}
+1
+{{- end -}}
+{{- end }}
+
+{{/* Static KRaft voter set: <ordinal>@<pod>.<headless>:<controller port> for every controller. */}}
 {{- define "kafka.quorumVoters" -}}
 {{- $fullname := include "kafka.fullname" . -}}
 {{- $headless := include "kafka.headlessName" . -}}
 {{- $voters := list -}}
-{{- range $i := until (int .Values.replicaCount) -}}
+{{- range $i := until (int (include "kafka.controllers" .)) -}}
 {{- $voters = append $voters (printf "%d@%s-%d.%s.%s.svc.%s:%d" $i $fullname $i $headless $.Release.Namespace $.Values.clusterDomain (int $.Values.listeners.controller.port)) -}}
 {{- end -}}
 {{- join "," $voters -}}
 {{- end }}
 
-{{- define "kafka.listeners" -}}
-{{- $l := list (printf "%s://0.0.0.0:%d" .Values.listeners.client.name (int .Values.listeners.client.port)) (printf "%s://0.0.0.0:%d" .Values.listeners.controller.name (int .Values.listeners.controller.port)) -}}
-{{- if .Values.externalAccess.enabled -}}
-{{- $l = append $l (printf "%s://0.0.0.0:%d" .Values.externalAccess.name (int .Values.externalAccess.containerPort)) -}}
-{{- end -}}
-{{- join "," $l -}}
+{{/*
+Replication settings derived from the node count. Keys set in `config` win.
+*/}}
+{{- define "kafka.replicationDefaults" -}}
+{{- $replicas := int (include "kafka.replicas" .) -}}
+{{- $rf := min $replicas 3 -}}
+{{- $isr := max 1 (sub $rf 1) -}}
+{{- $defaults := dict
+  "offsets.topic.replication.factor" $rf
+  "transaction.state.log.replication.factor" $rf
+  "transaction.state.log.min.isr" $isr
+  "share.coordinator.state.topic.replication.factor" $rf
+  "share.coordinator.state.topic.min.isr" $isr
+  "default.replication.factor" $rf
+  "min.insync.replicas" $isr -}}
+{{- range $k, $v := $defaults }}
+{{- if not (hasKey $.Values.config $k) }}
+{{ $k }}={{ $v }}
+{{- end }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -151,20 +183,30 @@ Fail at render time on configs that start but do not work: internal topics
 cannot have more replicas than there are brokers.
 */}}
 {{- define "kafka.validate" -}}
-{{- $replicas := int .Values.replicaCount -}}
-{{- if lt $replicas 1 -}}
-{{- fail "replicaCount must be at least 1" -}}
+{{- if not (has .Values.mode (list "single" "cluster")) -}}
+{{- fail "mode must be single or cluster" -}}
+{{- end -}}
+{{- $replicas := int (include "kafka.replicas" .) -}}
+{{- $controllers := int (include "kafka.controllers" .) -}}
+{{- if lt $controllers 1 -}}
+{{- fail "cluster.controllers must be at least 1" -}}
+{{- end -}}
+{{- if eq (mod $controllers 2) 0 -}}
+{{- fail (printf "cluster.controllers=%d must be odd; an even voter set tolerates no more failures than one fewer voter" $controllers) -}}
+{{- end -}}
+{{- if lt $replicas $controllers -}}
+{{- fail (printf "cluster.replicaCount=%d must be at least cluster.controllers=%d" $replicas $controllers) -}}
 {{- end -}}
 {{- range $k, $v := .Values.config -}}
-{{- if or (hasSuffix "replication.factor" $k) (eq $k "min.insync.replicas") (eq $k "transaction.state.log.min.isr") -}}
+{{- if or (hasSuffix "replication.factor" $k) (eq $k "min.insync.replicas") (hasSuffix "min.isr" $k) -}}
 {{- if gt (int $v) $replicas -}}
-{{- fail (printf "config.%s=%v exceeds replicaCount=%d; internal topics would fail to create" $k $v $replicas) -}}
+{{- fail (printf "config.%s=%v exceeds the node count (%d); internal topics would fail to create" $k $v $replicas) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
 {{- range .Values.topics -}}
 {{- if gt (int (default 1 .replicationFactor)) $replicas -}}
-{{- fail (printf "topic %s: replicationFactor exceeds replicaCount=%d" .name $replicas) -}}
+{{- fail (printf "topic %s: replicationFactor exceeds the node count (%d)" .name $replicas) -}}
 {{- end -}}
 {{- end -}}
 {{- if and .Values.externalAccess.enabled (not (has .Values.externalAccess.service.type (list "ClusterIP" "NodePort"))) -}}

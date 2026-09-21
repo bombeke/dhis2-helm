@@ -11,12 +11,11 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 data:
-  # Read by the image's docker wrapper from /mnt/shared/config. Environment
-  # variables set on the pod (node.id, listeners, advertised.listeners) are
-  # applied on top.
+  # Static settings shared by every node. The start script copies this file
+  # and appends the per-pod settings: node.id, process.roles, listeners and
+  # advertised.listeners.
   server.properties: |
-    # --- KRaft combined mode: every node is both broker and controller.
-    process.roles=broker,controller
+    # --- KRaft quorum ({{ include "kafka.controllers" . }} voter(s) out of {{ include "kafka.replicas" . }} node(s)).
     controller.listener.names={{ .Values.listeners.controller.name }}
     controller.quorum.voters={{ include "kafka.quorumVoters" . }}
 
@@ -30,6 +29,9 @@ data:
     inter.broker.listener.name={{ .Values.listeners.client.name }}
 
     log.dirs={{ .Values.persistence.mountPath }}
+
+    # --- Replication, derived from the node count
+    {{- include "kafka.replicationDefaults" . | trim | nindent 4 }}
 
     # --- values.yaml `config`
     {{- range $k, $v := .Values.config }}
@@ -55,3 +57,18 @@ data:
             level: WARN
           - name: kafka.network.RequestChannel$
             level: WARN
+
+  # For CLI tools run in the pod (kafka-storage.sh, probes, kafka-topics.sh).
+  tools-log4j2.yaml: |
+    Configuration:
+      Appenders:
+        Console:
+          name: STDERR
+          target: SYSTEM_ERR
+          PatternLayout:
+            pattern: "[%d] %p %m (%c)%n"
+      Loggers:
+        Root:
+          level: WARN
+          AppenderRef:
+            - ref: STDERR
