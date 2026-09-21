@@ -4616,6 +4616,36 @@ entries:
       licenses: Apache-2.0
     apiVersion: v2
     appVersion: 1.3.0
+    created: "2026-09-21T19:37:37.496125927Z"
+    description: Apache Gravitino's Iceberg REST catalog, standalone — a durable JDBC
+      catalog (SQLite on a volume, or PostgreSQL) over S3 or MinIO, with the config
+      file assembled from a ConfigMap plus Secret files, a read-only root filesystem,
+      and the JVM sized from the container's own limits.
+    digest: df5a2868e150214b1abcefcc01ccb761370b3132b55a45e2bff89b865c13cf20
+    home: https://gravitino.apache.org
+    keywords:
+    - gravitino
+    - iceberg
+    - iceberg-rest
+    - catalog
+    - data-lake
+    - s3
+    - minio
+    name: gravitino
+    sources:
+    - https://github.com/apache/gravitino
+    type: application
+    urls:
+    - https://github.com/bombeke/dhis2-helm/releases/download/gravitino-0.1.1/gravitino-0.1.1.tgz
+    version: 0.1.1
+  - annotations:
+      category: Database
+      images: |
+        - name: gravitino-iceberg-rest
+          image: docker.io/apache/gravitino-iceberg-rest:1.3.0
+      licenses: Apache-2.0
+    apiVersion: v2
+    appVersion: 1.3.0
     created: "2026-09-21T18:45:35.368112683Z"
     description: Apache Gravitino's Iceberg REST catalog, standalone — a durable JDBC
       catalog (SQLite on a volume, or PostgreSQL) over S3 or MinIO, with the config
@@ -5310,4 +5340,4 @@ entries:
     urls:
     - https://github.com/bombeke/dhis2-helm/releases/download/web-0.1.0/web-0.1.0.tgz
     version: 0.1.0
-generated: "2026-09-21T18:45:35.548303555Z"
+generated: "2026-09-21T19:37:37.688206763Z"
